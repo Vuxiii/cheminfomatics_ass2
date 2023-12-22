@@ -129,8 +129,8 @@ template< class SomeGraph >
 CycleGraph XOR_graphs( VertexMap &vm, const SomeGraph &gEduct, const SomeGraph &gProduct, const LUG &lgEduct, const LUG &lgProduct ) {
     /**
      * Implementation details:
-     *      Generally there are three cases when we want to XOR the two graphs:
-     *      - [1] There exists an edge on the educt side where the morphism maps to a corresponding edge
+     *      Generally there are three cases where we want to XOR the two graphs:
+     *      - [1] There exists an edge on the educt side where the morphism maps to a corresponding edge on the product side
      *           a) They share label -> Don't add it
      *           b) They do NOT share the same label -> Add it
      *      - [2] The edge is unique on the educt side -> Add it
