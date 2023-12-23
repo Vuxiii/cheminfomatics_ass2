@@ -13,6 +13,7 @@
 #include <boost/bimap.hpp>
 #include <boost/graph/depth_first_search.hpp>
 #include <boost/graph/graphviz.hpp>
+#include <boost/graph/johnson_all_pairs_shortest.hpp>
 
 #include <map>
 #include <set>
@@ -112,13 +113,14 @@ protected:
 };
 
 using CycleGraph = boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS, boost::no_property, boost::property<boost::edge_name_t, std::string>>;
-using VDescriptor = boost::adjacency_list<>::vertex_descriptor;
+using CycleVDescriptor = boost::graph_traits<CycleGraph>::vertex_descriptor;
 
 /**
  * This functions takes a morphism and two graphs and does an XOR on all the edges.
  * The resulting graph will be used to detect cycles between the two.
  * @tparam SomeGraph Because of the auto keywords everywhere it is quite bothersome to figure out the correct type...
  * @param vm The morphism mapping the educt to the product
+ * @param graph_map The mapping to and from the returned CycleGraph and the educt
  * @param gEduct The graph representation of the Educt
  * @param gProduct The graph representation of the Product
  * @param lgEduct The labelled graph representation of the Educt
@@ -126,7 +128,7 @@ using VDescriptor = boost::adjacency_list<>::vertex_descriptor;
  * @return An XOR graph from the educt and product graphs where each edge is labelled with either "ADD" or "REMOVE" depending on if it adds an edge or removes an edge from the Educt to the Product.
  */
 template< class SomeGraph >
-CycleGraph XOR_graphs( VertexMap &vm, const SomeGraph &gEduct, const SomeGraph &gProduct, const LUG &lgEduct, const LUG &lgProduct ) {
+CycleGraph XOR_graphs( VertexMap &vm, boost::bimap<UVertex, CycleVDescriptor> &graph_map, const SomeGraph &gEduct, const SomeGraph &gProduct, const LUG &lgEduct, const LUG &lgProduct ) {
     /**
      * Implementation details:
      *      Generally there are three cases where we want to XOR the two graphs:
@@ -146,18 +148,18 @@ CycleGraph XOR_graphs( VertexMap &vm, const SomeGraph &gEduct, const SomeGraph &
     CycleGraph cycle_graph;
     auto edge_types = boost::get(boost::edge_name, cycle_graph);
 
-    std::map<const UVertex, VDescriptor> to_cycle_graph;
+
 
     // This lambda function returns a vertex descriptor for the corresponding input vertex. If it has already been inserted into the cycle_graph it will return that, otherwise return a new one and insert it into the map.
     // We are only mapping the left graph to make it simple. In order to call this with a right mapping, simply use the vertex map's right side to map it into the left graph.
-    auto getVertex = [&to_cycle_graph, &cycle_graph]( UVertex vertex_to_find ) -> VDescriptor {
-        VDescriptor v;
-        auto it = to_cycle_graph.find(vertex_to_find);
-        if ( it != to_cycle_graph.end() ) {
+    auto getVertex = [&graph_map, &cycle_graph]( UVertex vertex_to_find ) -> CycleVDescriptor {
+        CycleVDescriptor v;
+        auto it = graph_map.left.find(vertex_to_find);
+        if ( it != graph_map.left.end() ) {
             v = it->second;
         } else {
             v = boost::add_vertex(cycle_graph);
-            to_cycle_graph.insert({vertex_to_find, v});
+            graph_map.insert({vertex_to_find, v});
         }
         return v;
     };
@@ -184,8 +186,8 @@ CycleGraph XOR_graphs( VertexMap &vm, const SomeGraph &gEduct, const SomeGraph &
                 if ( left_bond != right_bond ) {
                     // Case [1b] Add the edge. There is a difference.
 
-                    VDescriptor from = getVertex(left_source);
-                    VDescriptor to = getVertex(left_target);
+                    CycleVDescriptor from = getVertex(left_source);
+                    CycleVDescriptor to = getVertex(left_target);
                     if ( boost::edge(from, to, cycle_graph).second == false ) {
                         auto e = boost::add_edge(from, to, cycle_graph).first;
                         // Assuming only '-' and '=' are possible.
@@ -199,8 +201,8 @@ CycleGraph XOR_graphs( VertexMap &vm, const SomeGraph &gEduct, const SomeGraph &
             } else {
                 // Case [2]
                 // There exists an edge on the left hand side but NOT on the right hand side, therefore we want to add this edge.
-                VDescriptor from = getVertex(left_source);
-                VDescriptor to = getVertex(left_target);
+                CycleVDescriptor from = getVertex(left_source);
+                CycleVDescriptor to = getVertex(left_target);
                 if ( boost::edge(from, to, cycle_graph).second == false ) {
                     auto e = boost::add_edge(from, to, cycle_graph).first;
                     edge_types[e] = "REMOVE";
@@ -219,8 +221,8 @@ CycleGraph XOR_graphs( VertexMap &vm, const SomeGraph &gEduct, const SomeGraph &
             if ( !left_edge.second ) {
                 // Case [3]
                 // We want to add this edge.
-                VDescriptor from = getVertex(vm.right.at(right_source));
-                VDescriptor to = getVertex(left_target);
+                CycleVDescriptor from = getVertex(vm.right.at(right_source));
+                CycleVDescriptor to = getVertex(left_target);
                 if (boost::edge(from, to, cycle_graph).second == false) {
                     auto e = boost::add_edge(from, to, cycle_graph).first;
                     edge_types[e] = "ADD";
@@ -232,10 +234,20 @@ CycleGraph XOR_graphs( VertexMap &vm, const SomeGraph &gEduct, const SomeGraph &
     return cycle_graph;
 }
 
+using ORGraph = boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS, boost::no_property, boost::property<boost::edge_name_t, std::string>>;
+
+//template< class SomeGraph>
+//ORGraph OR_graphs( VertexMap &vm, const SomeGraph &gEduct, const SomeGraph &gProduct, const LUG &lgEduct, const LUG &lgProduct ) {
+//
+//}
+
 std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
 		const std::vector<std::shared_ptr<mod::graph::Graph>> &educts,
 		const std::vector<std::shared_ptr<mod::graph::Graph>> &products,
-		bool doChemistryCheck) {
+		bool doChemistryCheck,
+        int k,
+        int c) {
+
 	// first make objects representing the disjoint union of the educts and products
 	const auto makeUnion = [](const auto &gs) {
 		LUG lug;
@@ -279,44 +291,50 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
 			// We will limit to 'limit' permutations, as otherwise the PDF might get too large.
 			// Note that we also reject all rules where the atom type would change.
 			int permutationCount = 0;
+            int num = 0;
 			do {
-				VertexMap vm;
-				bool valid = true;
-				for(int i = 0; i != eductVertices.size(); i++) {
-					// check if the molecule data for the atoms matches, otherwise we can't make a rule
-					if(mod::graph::internal::getMolecule(eductVertices[i], lgEduct) !=
-					   mod::graph::internal::getMolecule(productVertices[i], lgProduct)) {
-						valid = false;
-						break;
-					}
-					vm.insert(VertexMap::value_type(eductVertices[i], productVertices[i]));
-				}
-				if(!valid) continue;
+                ++num;
+                VertexMap vm;
+                bool valid = true;
+                for (int i = 0; i != eductVertices.size(); i++) {
+                    // check if the molecule data for the atoms matches, otherwise we can't make a rule
+                    if (mod::graph::internal::getMolecule(eductVertices[i], lgEduct) !=
+                        mod::graph::internal::getMolecule(productVertices[i], lgProduct)) {
+                        valid = false;
+                        break;
+                    }
+                    vm.insert(VertexMap::value_type(eductVertices[i], productVertices[i]));
+                }
+                if (!valid) continue;
 
-                CycleGraph cycle_graph = XOR_graphs( vm, gEduct, gProduct, lgEduct, lgProduct );
+                boost::bimap <UVertex, CycleVDescriptor> cycle_graph_map;
+                CycleGraph cycle_graph = XOR_graphs(vm, cycle_graph_map, gEduct, gProduct, lgEduct, lgProduct);
                 auto edge_types = boost::get(boost::edge_name, cycle_graph);
 
-//                std::ofstream dotFile("graph.dot");
-//                boost::write_graphviz(dotFile, cycle_graph);
-//                dotFile.close();
+                std::string filename = "graph" + std::to_string(num) + ".dot";
+                std::ofstream dotFile(filename);
+                boost::write_graphviz(dotFile, cycle_graph);
+                dotFile.close();
 
                 bool has_cycle = false;
-                std::vector<std::vector<Vertex>> cycles;
+                std::vector <std::vector<CycleVDescriptor>> cycles;
                 cycle_detector vis(has_cycle, cycles);
                 boost::depth_first_search(cycle_graph, visitor(vis));
 //                std::cout << "The graph has a cycle? " << has_cycle << " Number of cycles: " << cycles.size() << std::endl;
-
-                if ( has_cycle ) {
-                    if ( cycles.size() > 1 ) valid = false;
+                if (has_cycle) {
+                    if (cycles.size() > 1) valid = false;
                     // Check if it is a valid cycle.
-                    for ( const auto &cycle : cycles ) {
-                        if ( cycle.size() % 2 == 1 ) valid = false; // We know that we can't possibly alternate between an add and a remove.
+                    for (const auto &cycle: cycles) {
+                        if (cycle.size() % 2 == 1)
+                            valid = false; // We know that we can't possibly alternate between an add and a remove.
+                        // If the cycle is not of the desired length, discard it.
+                        if (cycle.size() != c) valid = false;
 
                         std::string prev_operation = "";
                         bool first = true;
-                        VDescriptor prev;
-                        for ( auto it = cycle.begin(); it != cycle.end(); it++ ) {
-                            const VDescriptor v = *it;
+                        CycleVDescriptor prev;
+                        for (auto it = cycle.begin(); it != cycle.end(); it++) {
+                            const CycleVDescriptor v = *it;
                             if (!first) {
                                 auto e = boost::edge(prev, v, cycle_graph).first;
                                 // Check if we are alternating between ADD and REMOVE
@@ -342,13 +360,126 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
                 }
 //                std::cout << (valid ? "Valid cycle detected!\n" : "Invalid cycle detected!\n");
 
-//                std::cout << std::endl;
-//                std::cout << std::endl;
                 if (!valid) continue;
 
-                // We can also use the XOR graph to detect if more than 2 changes per vertex are happening.
-                // If so, discard that solution. TODO
+                // We can also use the XOR graph to detect if more than 2 changes per vertex are happening. We can do this because each edge represents a change in the production.
+                // If so, discard that solution.
+                auto range = boost::vertices(cycle_graph);
+                for (auto v = range.first; v != range.second; v++) {
+                    if (boost::degree(*v, cycle_graph) > 2) {
+                        valid = false;
+                    }
+                }
 
+                if (!valid) continue;
+
+                if (has_cycle) {
+                    // We know there is only a single cycle.
+
+                    // Now that we have ensured that the graph is chemically valid, we want to remove the vertex-mappings where the shortest distance to the cycle is greater than k.
+                    // To do this we do a johnson_all_pairs_shortest which will give us a distance matrix. We can iterate over all the vertices in the cycle, and add the vertices which distances are less than or equal to k.
+                    // For this we need the entire graph which means Educt OR Product, so we will need to do an OR on all the edges.
+
+                    // Make a copy of the graph and give each edge a weight of 1.
+
+                    using DstGraph = boost::adjacency_list <boost::vecS, boost::vecS, boost::undirectedS,
+                    /* Vertex prop */ boost::no_property,
+                    /* Edge prop   */ boost::property<boost::edge_weight_t, int>>;
+                    using DstVDescriptor = boost::graph_traits<DstGraph>::vertex_descriptor;
+
+                    DstGraph dst_graph;
+                    auto edge_weight = boost::get(boost::edge_weight, dst_graph);
+                    boost::bimap <UVertex, DstVDescriptor> dst_graph_map;
+                    for (auto e: asRange(edges(gEduct))) {
+                         const UVertex left_s = source(e, gEduct);
+                         const UVertex left_t = target(e, gEduct);
+
+                         DstVDescriptor right_s;
+                         DstVDescriptor right_t;
+
+                         auto s_it = dst_graph_map.left.find(left_s);
+                         auto t_it = dst_graph_map.left.find(left_t);
+                         if (s_it != dst_graph_map.left.end()) {
+                            right_s = s_it->second;
+                         } else {
+                            right_s = add_vertex(dst_graph);
+                            dst_graph_map.insert({left_s, right_s});
+                         }
+                         if (t_it != dst_graph_map.left.end()) {
+                            right_t = t_it->second;
+                         } else {
+                            right_t = add_vertex(dst_graph);
+                            dst_graph_map.insert({left_t, right_t});
+                         }
+                         if (boost::edge(right_s, right_t, dst_graph).second == false) {
+                            auto e = boost::add_edge(right_s, right_t, dst_graph).first;
+                            edge_weight[e] = 1;
+                         }
+                    }
+                    for (auto e: asRange(edges(gProduct))) {
+                       const UVertex left_s = vm.right.at(source(e, gProduct));
+                       const UVertex left_t = vm.right.at(target(e, gProduct));
+
+                       DstVDescriptor right_s;
+                       DstVDescriptor right_t;
+
+                       auto s_it = dst_graph_map.left.find(left_s);
+                       auto t_it = dst_graph_map.left.find(left_t);
+                       if (s_it != dst_graph_map.left.end()) {
+                           right_s = s_it->second;
+                       } else {
+                            right_s = add_vertex(dst_graph);
+                            dst_graph_map.insert({left_s, right_s});
+                       }
+                       if (t_it != dst_graph_map.left.end()) {
+                           right_t = t_it->second;
+                       } else {
+                           right_t = add_vertex(dst_graph);
+                           dst_graph_map.insert({left_t, right_t});
+                       }
+                       if (boost::edge(right_s, right_t, dst_graph).second == false) {
+                           auto e = boost::add_edge(right_s, right_t, dst_graph).first;
+                           edge_weight[e] = 1;
+                       }
+                    }
+
+                    unsigned int num_v = boost::num_vertices(dst_graph);
+                    std::vector <std::vector<int>> distance_matrix(num_v, std::vector<int>(num_v));
+
+                    boost::johnson_all_pairs_shortest_paths(dst_graph, distance_matrix);
+
+                    // Now that we have a distance matrix, iterate over all the vertices in the cycle, and only add the vertices that are <= k.
+                    std::vector <CycleVDescriptor> cycle = cycles.at(0);
+                    std::set <UVertex> retain_vertices;
+                    for (const CycleVDescriptor cycle_v: cycle) {
+                        // Map the vertex from the cycle graph -> Educt graph -> Dst Graph
+                        DstVDescriptor from_vertex = dst_graph_map.left.at(cycle_graph_map.right.at(cycle_v));
+                        for (UVertex v: asRange(vertices(gEduct))) {
+                            // Map the vertex from the Educt graph -> Dst Graph
+                            DstVDescriptor to_vertex = dst_graph_map.left.at(v);
+                            if (distance_matrix[from_vertex][to_vertex] <= k) {
+                                // Add the vertex v
+                                retain_vertices.insert(v);
+                            }
+                        }
+                    }
+                    // Only retain the mappings which are in the set
+                    auto it = vm.begin();
+                    while (it != vm.end()) {
+                        if (retain_vertices.find(it->left) == retain_vertices.end()) {
+                            it = vm.erase(it);
+                        } else {
+                            ++it;
+                        }
+                    }
+
+//                    for ( auto v : cycle ) {
+//                        std::cout << "Cycle: " << cycle_graph_map.right.at(v) << "\n";
+//                    }
+//                    for (const UVertex v: retain_vertices) {
+//                        std::cout << "Retain vertex: " << v << "\n";
+//                    }
+                }
 				vertexMaps.push_back(std::move(vm));
 				++permutationCount;
 				if(permutationCount == limit) break;
@@ -424,7 +555,7 @@ int main(int argc, char **argv) {
 		educts.push_back(g1);
 		products.push_back(g2);
 	}
-	auto rules = doStuff(educts, products, true);
+	auto rules = doStuff(educts, products, true, 2, 6);
 	for(auto r: rules) r->print();
 	return 0;
 }

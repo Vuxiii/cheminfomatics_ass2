@@ -12,11 +12,14 @@ if modValue != ourValue:
 
 # make doStuff a bit more friendly to use
 _doStuff_orig = pydoStuff.doStuff
-def _doStuff(educts, products, doChemistryCheck=True):
+def _doStuff(educts, products, doChemistryCheck=True, k=2, c=6):
 	return mod._unwrap(_doStuff_orig(
 		mod._wrap(mod.libpymod._VecGraph, educts),
 		mod._wrap(mod.libpymod._VecGraph, products),
-		doChemistryCheck))
+		doChemistryCheck,
+		k,
+		c))
+
 pydoStuff.doStuff = _doStuff
 doStuff = _doStuff
 # end of friendlyfier code
