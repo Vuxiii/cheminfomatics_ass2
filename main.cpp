@@ -311,55 +311,49 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
                 CycleGraph cycle_graph = XOR_graphs(vm, cycle_graph_map, gEduct, gProduct, lgEduct, lgProduct);
                 auto edge_types = boost::get(boost::edge_name, cycle_graph);
 
-                std::string filename = "graph" + std::to_string(num) + ".dot";
-                std::ofstream dotFile(filename);
-                boost::write_graphviz(dotFile, cycle_graph);
-                dotFile.close();
-
                 bool has_cycle = false;
                 std::vector <std::vector<CycleVDescriptor>> cycles;
                 cycle_detector vis(has_cycle, cycles);
                 boost::depth_first_search(cycle_graph, visitor(vis));
-//                std::cout << "The graph has a cycle? " << has_cycle << " Number of cycles: " << cycles.size() << std::endl;
-                if (has_cycle) {
-                    if (cycles.size() > 1) valid = false;
-                    // Check if it is a valid cycle.
-                    for (const auto &cycle: cycles) {
-                        if (cycle.size() % 2 == 1)
-                            valid = false; // We know that we can't possibly alternate between an add and a remove.
-                        // If the cycle is not of the desired length, discard it.
-                        if (cycle.size() != c) valid = false;
 
-                        std::string prev_operation = "";
-                        bool first = true;
-                        CycleVDescriptor prev;
-                        for (auto it = cycle.begin(); it != cycle.end(); it++) {
-                            const CycleVDescriptor v = *it;
-                            if (!first) {
-                                auto e = boost::edge(prev, v, cycle_graph).first;
-                                // Check if we are alternating between ADD and REMOVE
-                                std::string this_operation = edge_types[e];
-                                if (prev_operation == "") {
-                                    prev_operation = this_operation;
-                                } else {
-                                    if (prev_operation == this_operation) {
-                                        valid = false;
-                                    }
-                                    prev_operation = this_operation;
-                                }
-//                                std::cout << " [ " << this_operation << " ], ";
+                if (!has_cycle) continue;
+
+                // From this point, we know we have a cycle.
+
+                if (cycles.size() != 1) continue;
+
+                std::vector <CycleVDescriptor> cycle = cycles.at(0);
+
+                // Check if it is a valid cycle.
+                if (cycle.size() % 2 == 1)
+                    continue; // We know that we can't possibly alternate between an add and a remove.
+                // If the cycle is not of the desired length, discard it.
+                if (cycle.size() != c)
+                    continue;
+
+
+                // Cycle is only valid if we are alternating between a deleted and an add.
+                std::string prev_operation = "";
+                bool first = true;
+                CycleVDescriptor prev;
+                for (auto it = cycle.begin(); it != cycle.end() && valid; it++) {
+                    const CycleVDescriptor v = *it;
+                    if (!first) {
+                        auto e = boost::edge(prev, v, cycle_graph).first;
+                        // Check if we are alternating between ADD and REMOVE
+                        std::string this_operation = edge_types[e];
+                        if (prev_operation == "") {
+                            prev_operation = this_operation;
+                        } else {
+                            if (prev_operation == this_operation) {
+                                valid = false;
                             }
-//                            std::cout << v;
-                            first = false;
-                            prev = v;
+                            prev_operation = this_operation;
                         }
-                        auto e = boost::edge(prev, *cycle.begin(), cycle_graph).first;
-//                        std::cout << " [ " << edge_types[e] << " ], " << *cycle.begin() << "\n";
                     }
-//                    std::cout << std::endl;
+                    first = false;
+                    prev = v;
                 }
-//                std::cout << (valid ? "Valid cycle detected!\n" : "Invalid cycle detected!\n");
-
                 if (!valid) continue;
 
                 // We can also use the XOR graph to detect if more than 2 changes per vertex are happening. We can do this because each edge represents a change in the production.
@@ -373,114 +367,112 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
 
                 if (!valid) continue;
 
-                if (has_cycle) {
-                    // We know there is only a single cycle.
+                // We know there is only a single cycle.
 
-                    // Now that we have ensured that the graph is chemically valid, we want to remove the vertex-mappings where the shortest distance to the cycle is greater than k.
-                    // To do this we do a johnson_all_pairs_shortest which will give us a distance matrix. We can iterate over all the vertices in the cycle, and add the vertices which distances are less than or equal to k.
-                    // For this we need the entire graph which means Educt OR Product, so we will need to do an OR on all the edges.
+                // Now that we have ensured that the graph is chemically valid, we want to remove the vertex-mappings where the shortest distance to the cycle is greater than k.
+                // To do this we do a johnson_all_pairs_shortest_paths which will give us a distance matrix. We can iterate over all the vertices in the cycle, and add the vertices which distances are less than or equal to k.
+                // For this we need the entire graph which means Educt OR Product, so we will need to do an OR on all the edges.
 
-                    // Make a copy of the graph and give each edge a weight of 1.
+                // Make a copy of the graph and give each edge a weight of 1.
 
-                    using DstGraph = boost::adjacency_list <boost::vecS, boost::vecS, boost::undirectedS,
-                    /* Vertex prop */ boost::no_property,
-                    /* Edge prop   */ boost::property<boost::edge_weight_t, int>>;
-                    using DstVDescriptor = boost::graph_traits<DstGraph>::vertex_descriptor;
+                using DstGraph = boost::adjacency_list <boost::vecS, boost::vecS, boost::undirectedS,
+                /* Vertex prop */ boost::no_property,
+                /* Edge prop   */ boost::property<boost::edge_weight_t, int>>;
+                using DstVDescriptor = boost::graph_traits<DstGraph>::vertex_descriptor;
 
-                    DstGraph dst_graph;
-                    auto edge_weight = boost::get(boost::edge_weight, dst_graph);
-                    boost::bimap <UVertex, DstVDescriptor> dst_graph_map;
-                    for (auto e: asRange(edges(gEduct))) {
-                         const UVertex left_s = source(e, gEduct);
-                         const UVertex left_t = target(e, gEduct);
+                DstGraph dst_graph;
+                auto edge_weight = boost::get(boost::edge_weight, dst_graph);
+                boost::bimap <UVertex, DstVDescriptor> dst_graph_map;
+                for (auto e: asRange(edges(gEduct))) {
+                     const UVertex left_s = source(e, gEduct);
+                     const UVertex left_t = target(e, gEduct);
 
-                         DstVDescriptor right_s;
-                         DstVDescriptor right_t;
+                     DstVDescriptor right_s;
+                     DstVDescriptor right_t;
 
-                         auto s_it = dst_graph_map.left.find(left_s);
-                         auto t_it = dst_graph_map.left.find(left_t);
-                         if (s_it != dst_graph_map.left.end()) {
-                            right_s = s_it->second;
-                         } else {
-                            right_s = add_vertex(dst_graph);
-                            dst_graph_map.insert({left_s, right_s});
-                         }
-                         if (t_it != dst_graph_map.left.end()) {
-                            right_t = t_it->second;
-                         } else {
-                            right_t = add_vertex(dst_graph);
-                            dst_graph_map.insert({left_t, right_t});
-                         }
-                         if (boost::edge(right_s, right_t, dst_graph).second == false) {
-                            auto e = boost::add_edge(right_s, right_t, dst_graph).first;
-                            edge_weight[e] = 1;
-                         }
-                    }
-                    for (auto e: asRange(edges(gProduct))) {
-                       const UVertex left_s = vm.right.at(source(e, gProduct));
-                       const UVertex left_t = vm.right.at(target(e, gProduct));
-
-                       DstVDescriptor right_s;
-                       DstVDescriptor right_t;
-
-                       auto s_it = dst_graph_map.left.find(left_s);
-                       auto t_it = dst_graph_map.left.find(left_t);
-                       if (s_it != dst_graph_map.left.end()) {
-                           right_s = s_it->second;
-                       } else {
-                            right_s = add_vertex(dst_graph);
-                            dst_graph_map.insert({left_s, right_s});
-                       }
-                       if (t_it != dst_graph_map.left.end()) {
-                           right_t = t_it->second;
-                       } else {
-                           right_t = add_vertex(dst_graph);
-                           dst_graph_map.insert({left_t, right_t});
-                       }
-                       if (boost::edge(right_s, right_t, dst_graph).second == false) {
-                           auto e = boost::add_edge(right_s, right_t, dst_graph).first;
-                           edge_weight[e] = 1;
-                       }
-                    }
-
-                    unsigned int num_v = boost::num_vertices(dst_graph);
-                    std::vector <std::vector<int>> distance_matrix(num_v, std::vector<int>(num_v));
-
-                    boost::johnson_all_pairs_shortest_paths(dst_graph, distance_matrix);
-
-                    // Now that we have a distance matrix, iterate over all the vertices in the cycle, and only add the vertices that are <= k.
-                    std::vector <CycleVDescriptor> cycle = cycles.at(0);
-                    std::set <UVertex> retain_vertices;
-                    for (const CycleVDescriptor cycle_v: cycle) {
-                        // Map the vertex from the cycle graph -> Educt graph -> Dst Graph
-                        DstVDescriptor from_vertex = dst_graph_map.left.at(cycle_graph_map.right.at(cycle_v));
-                        for (UVertex v: asRange(vertices(gEduct))) {
-                            // Map the vertex from the Educt graph -> Dst Graph
-                            DstVDescriptor to_vertex = dst_graph_map.left.at(v);
-                            if (distance_matrix[from_vertex][to_vertex] <= k) {
-                                // Add the vertex v
-                                retain_vertices.insert(v);
-                            }
-                        }
-                    }
-                    // Only retain the mappings which are in the set
-                    auto it = vm.begin();
-                    while (it != vm.end()) {
-                        if (retain_vertices.find(it->left) == retain_vertices.end()) {
-                            it = vm.erase(it);
-                        } else {
-                            ++it;
-                        }
-                    }
-
-//                    for ( auto v : cycle ) {
-//                        std::cout << "Cycle: " << cycle_graph_map.right.at(v) << "\n";
-//                    }
-//                    for (const UVertex v: retain_vertices) {
-//                        std::cout << "Retain vertex: " << v << "\n";
-//                    }
+                     auto s_it = dst_graph_map.left.find(left_s);
+                     auto t_it = dst_graph_map.left.find(left_t);
+                     if (s_it != dst_graph_map.left.end()) {
+                        right_s = s_it->second;
+                     } else {
+                        right_s = add_vertex(dst_graph);
+                        dst_graph_map.insert({left_s, right_s});
+                     }
+                     if (t_it != dst_graph_map.left.end()) {
+                        right_t = t_it->second;
+                     } else {
+                        right_t = add_vertex(dst_graph);
+                        dst_graph_map.insert({left_t, right_t});
+                     }
+                     if (boost::edge(right_s, right_t, dst_graph).second == false) {
+                        auto e = boost::add_edge(right_s, right_t, dst_graph).first;
+                        edge_weight[e] = 1;
+                     }
                 }
-				vertexMaps.push_back(std::move(vm));
+                for (auto e: asRange(edges(gProduct))) {
+                    // We don't care about the Product side, so we map them to the educt side.
+                    const UVertex left_s = vm.right.at(source(e, gProduct));
+                    const UVertex left_t = vm.right.at(target(e, gProduct));
+
+                    DstVDescriptor right_s;
+                    DstVDescriptor right_t;
+
+                    auto s_it = dst_graph_map.left.find(left_s);
+                    auto t_it = dst_graph_map.left.find(left_t);
+                    if (s_it != dst_graph_map.left.end()) {
+                       right_s = s_it->second;
+                    } else {
+                        right_s = add_vertex(dst_graph);
+                        dst_graph_map.insert({left_s, right_s});
+                    }
+                    if (t_it != dst_graph_map.left.end()) {
+                       right_t = t_it->second;
+                    } else {
+                       right_t = add_vertex(dst_graph);
+                       dst_graph_map.insert({left_t, right_t});
+                    }
+                    if (boost::edge(right_s, right_t, dst_graph).second == false) {
+                       auto e = boost::add_edge(right_s, right_t, dst_graph).first;
+                       edge_weight[e] = 1;
+                    }
+                }
+
+                unsigned int num_v = boost::num_vertices(dst_graph);
+                std::vector <std::vector<int>> distance_matrix(num_v, std::vector<int>(num_v));
+
+                boost::johnson_all_pairs_shortest_paths(dst_graph, distance_matrix);
+
+                // Now that we have a distance matrix, iterate over all the vertices in the cycle, and only add the vertices that are <= k.
+
+                std::set <UVertex> retain_vertices;
+                for (const CycleVDescriptor cycle_v : cycle) {
+                    // Map the vertex from the cycle graph -> Educt graph -> Dst Graph
+                    DstVDescriptor from_vertex = dst_graph_map.left.at(cycle_graph_map.right.at(cycle_v));
+                    for (UVertex v: asRange(vertices(gEduct))) {
+                        // Map the vertex from the Educt graph -> Dst Graph
+                        DstVDescriptor to_vertex = dst_graph_map.left.at(v);
+                        if (distance_matrix[from_vertex][to_vertex] <= k) {
+                            // Add the vertex v
+                            retain_vertices.insert(v);
+                        }
+                    }
+                }
+                // Only retain the mappings which are in the set
+                auto it = vm.begin();
+                while (it != vm.end()) {
+                    if (retain_vertices.find(it->left) == retain_vertices.end()) {
+                        it = vm.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+#if 0
+                std::string filename = "graph" + std::to_string(permutationCount) + ".dot";
+                std::ofstream dotFile(filename);
+                boost::write_graphviz(dotFile, cycle_graph);
+                dotFile.close();
+#endif
+                vertexMaps.push_back(std::move(vm));
 				++permutationCount;
 				if(permutationCount == limit) break;
 			} while(std::next_permutation(eductVertices.begin(), eductVertices.end()));

@@ -12,7 +12,7 @@ if modValue != ourValue:
 
 # make doStuff a bit more friendly to use
 _doStuff_orig = pydoStuff.doStuff
-def _doStuff(educts, products, doChemistryCheck=True, k=2, c=6):
+def _doStuff(educts, products, doChemistryCheck=True, k=1, c=6):
 	return mod._unwrap(_doStuff_orig(
 		mod._wrap(mod.libpymod._VecGraph, educts),
 		mod._wrap(mod.libpymod._VecGraph, products),
@@ -26,6 +26,6 @@ doStuff = _doStuff
 
 g1 = smiles("OCC=O")
 g2 = smiles("OC=CO")
-res = doStuff([g1], [g2])
+res = doStuff([g1], [g2], c=6)
 for a in res:
 	a.print()
