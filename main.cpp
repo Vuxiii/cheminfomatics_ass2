@@ -547,7 +547,9 @@ int main(int argc, char **argv) {
 		educts.push_back(g1);
 		products.push_back(g2);
 	}
-	auto rules = doStuff(educts, products, true, 2, 6);
+    constexpr int c = 2;
+    constexpr int k = 4
+	auto rules = doStuff(educts, products, true, c, k);
 	for(auto r: rules) r->print();
 	return 0;
 }
