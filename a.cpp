@@ -24,8 +24,8 @@ int main() {
 }
 
 template< typename T >
-struct Comb {
-    Comb( std::vector<T> data ) 
+struct Combinatorical_Generator {
+    Combinatorical_Generator( std::vector<T> data ) 
     : data(data) 
     {
         for ( int i = 0; i < data.size(); ++i ) {
