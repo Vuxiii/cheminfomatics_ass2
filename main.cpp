@@ -19,6 +19,7 @@
 #include <boost/graph/johnson_all_pairs_shortest.hpp>
 
 #include <map>
+#include <optional>
 #include <set>
 #include <iostream>
 #include <fstream>
@@ -69,150 +70,190 @@ int bondValue(BondType bt) {
 	__builtin_unreachable();
 }
 
+template< typename T >
+struct Comb {
+    Comb( std::vector<T> data ) 
+    : data(data) 
+    {
+        for ( int i = 0; i < data.size(); ++i ) {
+            chosen.push_back(false);
+        }
+    }
+
+    Comb() {}
+
+    std::vector<T> &get_data() {
+        return data;
+    }
+
+    std::vector<bool> &get_chosen() {
+        return chosen;
+    }
+
+    unsigned int count_chosen() const {
+        unsigned int c = 0;
+
+        for ( auto it = chosen.rbegin(); it != chosen.rend() && *it; ++it ) {
+            c++;
+        }
+
+        return c;
+    }
+
+    void push_back( T e ) {
+        data.push_back( e );
+        chosen.push_back( false );
+    }
+
+    std::vector<T> &current() {
+        if ( data_image ) {
+            return *data_image;
+        }
+        data_image = std::vector<T>{};
+        auto it_d = data.begin();
+        auto it_c = chosen.begin();
+        while ( it_d != data.end() ) {
+            if ( *it_c ) {
+                data_image->push_back(*it_d);
+            }
+            it_d++;
+            it_c++;
+        }
+        return *data_image;
+    }
+
+    bool next() {
+        if ( false == std::next_permutation(chosen.begin(), chosen.end()) ) {
+            return false;
+        }
+        data_image = std::nullopt;
+        return true;
+    }
+
+    void reset_chosen( unsigned int n ) {
+        std::fill(chosen.begin(), chosen.end()-n, false);
+        std::fill(chosen.end()-n, chosen.end(), true);
+        data_image = std::nullopt;
+    }
+
+private:
+    std::optional<std::vector<T>> data_image;
+    std::vector<T> data;
+    std::vector<bool> chosen;
+};
+
 template<class SomeGraph>
 struct Generator {
 
-    Generator( const SomeGraph &gEduct, const SomeGraph &gProduct, const LUG &lgEduct, const LUG &lgProduct )
+    Generator( const SomeGraph &gEduct, const SomeGraph &gProduct, const LUG &lgEduct, const LUG &lgProduct, unsigned int cycle_length )
         : gEduct(gEduct)
         , gProduct(gProduct)
         , lgEduct(lgEduct)
         , lgProduct(lgProduct)
+        , cycle_length(cycle_length)
         {
             // We are assuming that we have the same atoms on both sides.
             for ( UVertex v_product : asRange(vertices(gProduct)) ) {
                 AtomData molecule = mod::graph::internal::getMolecule(v_product, lgProduct);
-                auto it = product_molecules.find(molecule);
-                if (it == product_molecules.end() ) {
-                    mapping_order.push_back(molecule);
-                    product_molecules[molecule] = {v_product};
+                if ( product_molecules.find(molecule) == product_molecules.end() ) {
+                    product_molecules.insert({molecule, Comb<UVertex>({v_product})});
                 } else {
                     product_molecules[molecule].push_back(v_product);
                 }
             }
-            for ( UVertex v_educt : asRange(vertices(gEduct)) ) {
-                AtomData molecule = mod::graph::internal::getMolecule(v_educt, lgEduct);
-                auto it = educt_molecules.find(molecule);
-                if (it == educt_molecules.end() ) {
-                    educt_molecules[molecule] = {v_educt};
-                } else {
-                    educt_molecules[molecule].push_back(v_educt);
-                }
+            
+            for ( std::pair<const AtomData, Comb<UVertex>> &pair : product_molecules ) {
+                std::sort(pair.second.get_data().begin(), pair.second.get_data().end());
             }
-
-            for ( std::pair<const AtomData, std::vector<UVertex>> &pair : educt_molecules ) {
-                std::sort(pair.second.begin(), pair.second.end());
-            }
-            for ( std::pair<const AtomData, std::vector<UVertex>> &pair : product_molecules ) {
-                std::sort(pair.second.begin(), pair.second.end());
-            }
-
-            std::sort(mapping_order.begin(), mapping_order.end(), [](AtomData l, AtomData r){
-                return l.getAtomId() > r.getAtomId();
+            
+            const auto vsEduct = vertices(gEduct);
+			std::vector<UVertex> eductVertices(vsEduct.first, vsEduct.second);
+            std::sort(eductVertices.begin(), eductVertices.end(), [&lgEduct](UVertex l, UVertex r){
+                return mod::graph::internal::getMolecule(l, lgEduct).getAtomId() < mod::graph::internal::getMolecule(r, lgEduct).getAtomId();
             });
-            std::cout << "Mapping order: ";
-            for ( auto &data : mapping_order ) {
-                std::cout << data;
+            for ( auto v : eductVertices ) {
+                chosen_molecules.push_back(v);
             }
-            std::cout << std::endl;
-            std::string a;
-            std::cin >> a;
-            // Make the initial mapping
-            for ( const AtomData &molecule : mapping_order ) {
-                auto it_educt = educt_molecules[molecule].begin();
-                auto it_product = product_molecules[molecule].begin();
-
-                while (it_educt != educt_molecules[molecule].end()) {
-                    vm.insert({*it_educt, *it_product});
-                    it_educt++;
-                    it_product++;
-                }
-            }
-
-            // Remove the mappings where the size is only 1
-            for (auto it = educt_molecules.begin(); it != educt_molecules.end(); /* no increment here */) {
-                // Check a condition and erase if needed
-                if (it->second.size() == 1) {
-                    it = educt_molecules.erase(it);
-                    std::cout << "Deleted for molecule " << it->first << std::endl;
-                    for ( auto m_it = mapping_order.begin(); m_it != mapping_order.end(); m_it++ ) {
-                        if ( *m_it == it->first ) {
-                            mapping_order.erase( m_it );
-                            break;
-                        }
+            chosen_molecules.reset_chosen(cycle_length);
+            {
+                // First count how many we have picked of each type.
+                std::map<AtomData, unsigned int> molecule_count;
+                for ( auto it = chosen_molecules.current().begin(); it != chosen_molecules.current().end(); it++ ) {
+                    auto mol = mod::graph::internal::getMolecule(*it, lgEduct);
+                    if ( molecule_count.find(mol) == molecule_count.end() ) {
+                        molecule_count[mol] = 1;
+                    } else {
+                        molecule_count[mol]++;
                     }
-                    it = educt_molecules.begin();
-                } else {
-                    ++it;
-                }
-            }
-            for (auto it = product_molecules.begin(); it != product_molecules.end(); /* no increment here */) {
-                // Check a condition and erase if needed
-                if (it->second.size() == 1) {
-                    it = product_molecules.erase(it);
-                    for ( auto m_it = mapping_order.begin(); m_it != mapping_order.end(); m_it++  ) {
-                        if ( *m_it == it->first ) {
-                            mapping_order.erase( m_it );
-                            break;
-                        }
+                    if ( educt_molecules.find(mol) == educt_molecules.end() ) {
+                        educt_molecules[mol] = {*it};
+                    } else {
+                        educt_molecules[mol].push_back(*it);
                     }
-                } else {
-                    ++it;
+                }
+                // Specify that we want that many of each type.
+                for ( auto &[mol, c] : molecule_count ) {
+                    product_molecules[mol].reset_chosen(c);
+                    mapping_order.push_back(mol);
                 }
             }
+            // Now we have seperated the vertices into containers of unique type.
+            // And we have selected cycle_length amount of vertices from the educt side to map.
+
+            // Sort so we place the Hydrogens last.
+            make_mapping();
         }
 
     bool operator++() {
         bool permute_next_molecule;
         int current_molecule = 0;
+        // std::cout << "Mapping order: ";
+        // for ( auto &atom : mapping_order ) {
+        //     std::cout << atom << " ";
+        // }
+        // std::cout << "\n";
         do {
             permute_next_molecule = false;
             AtomData molecule = mapping_order[current_molecule];
-            // std::cout << "Current molecule for mapping: " << molecule << std::endl;
-            // if ( molecule.getAtomId() == 1 ) std::exit(1);
-            std::vector<UVertex> &product = product_molecules[molecule];
             std::vector<UVertex> &educt = educt_molecules[molecule];
+            Comb<UVertex> &product = product_molecules[molecule];
+            // std::cout << "Current molecule index " << current_molecule << " With molecule " << molecule << "\n";
             
-            assert(product.size() == educt.size());
+            // std::cout << "Product: ";
+            // for ( auto v : product.current() ) { std::cout << v; }
+            // std::cout << "\nEduct:   ";
+            // for ( auto v : educt ) { std::cout << v; }
+            // std::cout << "\n";
+            assert(product.current().size() == educt.size());
 
             // std::cout << "Before: ";
-            // for ( auto v : product ) {
+            // for ( auto v : product.current() ) {
             //     std::cout << v << ' ' << mod::graph::internal::getMolecule(v, lgProduct) << ' ';
             // }
             // std::cout << "\nAfter:  "; 
 
-            if ( std::next_permutation(product.begin(), product.end()) == false ) {
+            
+            if ( product.next() == false ) {
                 // Progress to the next molecule
                 // std::cout << "We are false?";
                 permute_next_molecule = true;
                 current_molecule = (current_molecule+1) % mapping_order.size();
-                if (current_molecule == 0) return false;
+                if (current_molecule == 0) {
+                    // Select new educt molecules.
+                    if ( false == permute_educts() ) {
+                        // There are no more new combinations of molecules.
+                        std::cout << "No more permutations\n";
+                        return false;
+                    }
+                }
             }
-            // for ( auto v : product_molecules[molecule] ) {
+            // for ( auto v : product_molecules[molecule].current() ) {
             //     std::cout << v << ' ' << mod::graph::internal::getMolecule(v, lgProduct) << ' ';
             // }
             // std::cout << std::endl;
             
-            // We need to update this specific mapping in the VertexMap.
-            
-            auto it_educt = educt.begin();
-            auto it_product = product.begin();
-            
-            while (it_educt != educt_molecules[molecule].end()) {
-                // Remove the old mappings
-                auto left = vm.left.find(*it_educt);
-                
-                if ( left != vm.left.end() ) {
-                    vm.left.erase(left);
-                }
-                auto right = vm.right.find(*it_product);
-                if ( right != vm.right.end() ) {
-                    vm.right.erase(right);
-                }
-                // Replace it by the new mapping
-                vm.insert({*it_educt, *it_product});
-                it_educt++;
-                it_product++;
-            }
+            make_mapping();
+
         } while (permute_next_molecule);
         return true;
     }
@@ -221,18 +262,69 @@ struct Generator {
         // std::cout << "Size of VM: " << vm.size() << std::endl;
         return this->vm;
     }
-
 private:
 
-    // int current_molecule = 0;
+    bool permute_educts() {
+        // std::cout << "Call to permute educts!!!!!!!!!!!!!!!!!!!!!\n";
+        if ( !chosen_molecules.next() ) {
+            return false;
+        }
+        mapping_order.clear();
+        educt_molecules.clear();
+
+        // First count how many we have picked of each type.
+        std::map<AtomData, unsigned int> molecule_count;
+        for ( auto it = chosen_molecules.current().begin(); it != chosen_molecules.current().end(); it++ ) {
+            auto mol = mod::graph::internal::getMolecule(*it, lgEduct);
+            // std::cout << *it << " " << mol << "\n";
+            if ( molecule_count.find(mol) == molecule_count.end() ) {
+                molecule_count[mol] = 1;
+            } else {
+                molecule_count[mol]++;
+            }
+            if ( educt_molecules.find(mol) == educt_molecules.end() ) {
+                educt_molecules[mol] = {*it};
+            } else {
+                educt_molecules[mol].push_back(*it);
+            }
+        }
+        // Specify that we want that many of each type.
+        for ( auto &[mol, c] : molecule_count ) {
+            // std::cout << "We want " << c << " of " << mol << std::endl;
+            product_molecules[mol].reset_chosen(c);
+            mapping_order.push_back(mol);
+        }
+        std::sort(mapping_order.begin(), mapping_order.end(), [](auto &l, auto &r) {return l.getAtomId() > r.getAtomId(); });
+           
+
+        return true;
+    }
+
+    void make_mapping() {
+        vm.clear();
+        std::sort(mapping_order.begin(), mapping_order.end(), [](auto &l, auto &r) { return l.getAtomId() > r.getAtomId(); });
+        for ( AtomData &molecule : mapping_order ) {                
+            auto it_educt = educt_molecules[molecule].begin();
+            auto it_product = product_molecules[molecule].current().begin();
+            while ( it_educt != educt_molecules[molecule].end() ) {
+                vm.insert({*it_educt, *it_product});
+                it_educt++;
+                it_product++;
+            }
+        }
+    }
 
     VertexMap vm;
     const SomeGraph &gEduct;
     const SomeGraph &gProduct;
     const LUG &lgEduct;
     const LUG &lgProduct;
+    unsigned int cycle_length;
+    
+    Comb<UVertex> chosen_molecules;
+
     std::vector<AtomData> mapping_order;
-    std::map<AtomData, std::vector<UVertex>> product_molecules;
+    std::map<AtomData, Comb<UVertex>> product_molecules;
     std::map<AtomData, std::vector<UVertex>> educt_molecules;
 };
 
@@ -341,10 +433,15 @@ CycleGraph XOR_graphs( VertexMap &vm, boost::bimap<UVertex, CycleVDescriptor> &g
         const UVertex right_source = vertex_pair.right;
 
         for ( const UEdge &left_edge : asRange(out_edges(left_source, gEduct)) ) {
-            // Find the right side
+            
             const UVertex left_target = target(left_edge, gEduct);
-            const UVertex right_target = vm.left.at(left_target);
 
+            // Do we actually have the target in the VertexMap. If not -> continues;
+            if ( vm.left.find(left_target) == vm.left.end() ) { continue; }
+            
+            // Find the right side
+            const UVertex right_target = vm.left.at(left_target);
+            
             // Do we have a matching right edge?
             const std::pair<UEdge, bool> &right_edge = edge(right_source, right_target, gProduct);
 
@@ -359,11 +456,13 @@ CycleGraph XOR_graphs( VertexMap &vm, boost::bimap<UVertex, CycleVDescriptor> &g
                     CycleVDescriptor from = getVertex(left_source);
                     CycleVDescriptor to = getVertex(left_target);
                     if ( boost::edge(from, to, cycle_graph).second == false ) {
-                        auto e = boost::add_edge(from, to, cycle_graph).first;
+                        
                         // Assuming only '-' and '=' are possible.
                         if (left_bond == "-" && right_bond == "=") {
+                            auto e = boost::add_edge(from, to, cycle_graph).first;
                             edge_types[e] = "ADD";
                         } else if (left_bond == "=" && right_bond == "-"){
+                            auto e = boost::add_edge(from, to, cycle_graph).first;
                             edge_types[e] = "REMOVE";
                         }
                     }
@@ -371,11 +470,17 @@ CycleGraph XOR_graphs( VertexMap &vm, boost::bimap<UVertex, CycleVDescriptor> &g
             } else {
                 // Case [2]
                 // There exists an edge on the left hand side but NOT on the right hand side, therefore we want to add this edge.
+                const std::string &left_bond = mod::graph::internal::getString(left_edge, lgEduct);
+
                 CycleVDescriptor from = getVertex(left_source);
                 CycleVDescriptor to = getVertex(left_target);
                 if ( boost::edge(from, to, cycle_graph).second == false ) {
-                    auto e = boost::add_edge(from, to, cycle_graph).first;
-                    edge_types[e] = "REMOVE";
+                    
+                    if ( left_bond == "-" ) {
+                        auto e = boost::add_edge(from, to, cycle_graph).first;
+                        edge_types[e] = "REMOVE";
+                    }
+                    
                 }
             }
         }
@@ -383,6 +488,8 @@ CycleGraph XOR_graphs( VertexMap &vm, boost::bimap<UVertex, CycleVDescriptor> &g
         for ( const UEdge &right_edge : asRange(out_edges(right_source, gProduct)) ) {
             // Find the left side
             const UVertex right_target = target(right_edge, gProduct);
+
+            if ( vm.right.find(right_target) == vm.right.end() ) { continue; }
             const UVertex left_target = vm.right.at(right_target);
 
             // Do we have a matching left edge?
@@ -391,11 +498,14 @@ CycleGraph XOR_graphs( VertexMap &vm, boost::bimap<UVertex, CycleVDescriptor> &g
             if ( !left_edge.second ) {
                 // Case [3]
                 // We want to add this edge.
-                CycleVDescriptor from = getVertex(vm.right.at(right_source));
+                const std::string &right_bond = mod::graph::internal::getString(right_edge, lgProduct);
+                CycleVDescriptor from = getVertex(left_source);
                 CycleVDescriptor to = getVertex(left_target);
                 if (boost::edge(from, to, cycle_graph).second == false) {
-                    auto e = boost::add_edge(from, to, cycle_graph).first;
-                    edge_types[e] = "ADD";
+                    if ( right_bond == "-" ) {
+                        auto e = boost::add_edge(from, to, cycle_graph).first;
+                        edge_types[e] = "ADD";
+                    }
                 }
 
             }
@@ -456,25 +566,27 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
 			// Note that we also reject all rules where the atom type would change.
 			int permutationCount = 0;
             int num = 0;
-            Generator vertexmap_gen(gEduct, gProduct, lgEduct, lgProduct);
+            std::cout << "0" << std::endl;
+            Generator vertexmap_gen(gEduct, gProduct, lgEduct, lgProduct, c);
             bool repeat = false;
 			do {
-                // std::cout << "0" << std::endl;
-                // std::cout << "1" << std::endl;
+                std::cout << "1" << std::endl;
                 VertexMap vm = *vertexmap_gen;
-                // std::cout << "2" << std::endl;
-                repeat = ++vertexmap_gen;
-                bool valid = true;
-                // for(const auto &vt: vm) {
-                //     std::cout << "\"" << mod::graph::internal::getMolecule(vt.left, lgEduct) << "\" "
-                //             << getVertexId(vt.left, gEduct)
-                //             << "\t<=>   "
-                //             << getVertexId(vt.right, gProduct) << " \""
-                //             << mod::graph::internal::getMolecule(vt.right, lgProduct) << "\"\n";
-                // }
-                // std::cout << std::endl;
+                std::cout << "2" << std::endl;
+                for(const auto &vt: vm) {
+                    std::cout << "\"" << mod::graph::internal::getMolecule(vt.left, lgEduct) << "\" "
+                            << getVertexId(vt.left, gEduct)
+                            << "\t<=>   "
+                            << getVertexId(vt.right, gProduct) << " \""
+                            << mod::graph::internal::getMolecule(vt.right, lgProduct) << "\"\n";
+                }
+                std::cout << std::endl;
                 // std::string a;
                 // std::cin >> a;
+                
+                repeat = ++vertexmap_gen;
+                bool valid = true;
+                
                 // Make sure to copy the VertexMap before modifying it.
 
 //                 for (int i = 0; i != eductVertices.size(); i++) {
@@ -586,7 +698,7 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
                 }
 
                 if (!valid) continue;
-
+                std::cout << "The degree for all vertices are less than 3\n";
                 // We know there is only a single cycle.
 
                 // Now that we have ensured that the graph is chemically valid, we want to remove the vertex-mappings where the shortest distance to the cycle is greater than k.
@@ -631,6 +743,8 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
                 }
                 for (auto e: asRange(edges(gProduct))) {
                     // We don't care about the Product side, so we map them to the educt side.
+                    if ( vm.right.find( source(e, gProduct) ) == vm.right.end() ) continue;
+                    if ( vm.right.find( target(e, gProduct) ) == vm.right.end() ) continue;
                     const UVertex left_s = vm.right.at(source(e, gProduct));
                     const UVertex left_t = vm.right.at(target(e, gProduct));
 
@@ -656,7 +770,7 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
                        edge_weight[e] = 1;
                     }
                 }
-
+                std::cout << "We have successfully made the OR graph\n";
                 unsigned int num_v = boost::num_vertices(dst_graph);
                 std::vector <std::vector<int>> distance_matrix(num_v, std::vector<int>(num_v));
 

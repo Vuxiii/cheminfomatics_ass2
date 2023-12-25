@@ -24,15 +24,15 @@ pydoStuff.doStuff = _doStuff
 doStuff = _doStuff
 # end of friendlyfier code
 
-educts = [smiles("OCC=O")]
-products = [smiles("OC=CO")]
+# educts = [smiles("OCC=O")]
+# products = [smiles("OC=CO")]
 
-educts = [smiles("C=C"), smiles("C=C")]
-products = [smiles("C1CCC1")]
+# educts = [smiles("C=C"), smiles("C=C")]
+# products = [smiles("C1CCC1")]
 
-# educts = [smiles("O"), smiles("Cl"), smiles("CC(=O)OCC")]
-# products = [smiles("Cl"), smiles("OCC"), smiles("CC(=O)O")]
+educts = [smiles("O"), smiles("Cl"), smiles("CC(=O)OCC")]
+products = [smiles("Cl"), smiles("OCC"), smiles("CC(=O)O")]
 
-res = doStuff(educts, products, k=1, c=4)
+res = doStuff(educts, products, k=1, c=6)
 for a in res:
 	a.print()
