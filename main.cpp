@@ -1,3 +1,6 @@
+#include <algorithm>
+#include <cassert>
+#include <jla_boost/graph/PairToRangeAdaptor.hpp>
 #include <mod/Chem.hpp>
 #include <mod/graph/Graph.hpp>
 #include <mod/graph/internal/Graph.hpp>
@@ -65,6 +68,173 @@ int bondValue(BondType bt) {
 	}
 	__builtin_unreachable();
 }
+
+template<class SomeGraph>
+struct Generator {
+
+    Generator( const SomeGraph &gEduct, const SomeGraph &gProduct, const LUG &lgEduct, const LUG &lgProduct )
+        : gEduct(gEduct)
+        , gProduct(gProduct)
+        , lgEduct(lgEduct)
+        , lgProduct(lgProduct)
+        {
+            // We are assuming that we have the same atoms on both sides.
+            for ( UVertex v_product : asRange(vertices(gProduct)) ) {
+                AtomData molecule = mod::graph::internal::getMolecule(v_product, lgProduct);
+                auto it = product_molecules.find(molecule);
+                if (it == product_molecules.end() ) {
+                    mapping_order.push_back(molecule);
+                    product_molecules[molecule] = {v_product};
+                } else {
+                    product_molecules[molecule].push_back(v_product);
+                }
+            }
+            for ( UVertex v_educt : asRange(vertices(gEduct)) ) {
+                AtomData molecule = mod::graph::internal::getMolecule(v_educt, lgEduct);
+                auto it = educt_molecules.find(molecule);
+                if (it == educt_molecules.end() ) {
+                    educt_molecules[molecule] = {v_educt};
+                } else {
+                    educt_molecules[molecule].push_back(v_educt);
+                }
+            }
+
+            for ( std::pair<const AtomData, std::vector<UVertex>> &pair : educt_molecules ) {
+                std::sort(pair.second.begin(), pair.second.end());
+            }
+            for ( std::pair<const AtomData, std::vector<UVertex>> &pair : product_molecules ) {
+                std::sort(pair.second.begin(), pair.second.end());
+            }
+
+            std::sort(mapping_order.begin(), mapping_order.end(), [](AtomData l, AtomData r){
+                return l.getAtomId() > r.getAtomId();
+            });
+            std::cout << "Mapping order: ";
+            for ( auto &data : mapping_order ) {
+                std::cout << data;
+            }
+            std::cout << std::endl;
+            std::string a;
+            std::cin >> a;
+            // Make the initial mapping
+            for ( const AtomData &molecule : mapping_order ) {
+                auto it_educt = educt_molecules[molecule].begin();
+                auto it_product = product_molecules[molecule].begin();
+
+                while (it_educt != educt_molecules[molecule].end()) {
+                    vm.insert({*it_educt, *it_product});
+                    it_educt++;
+                    it_product++;
+                }
+            }
+
+            // Remove the mappings where the size is only 1
+            for (auto it = educt_molecules.begin(); it != educt_molecules.end(); /* no increment here */) {
+                // Check a condition and erase if needed
+                if (it->second.size() == 1) {
+                    it = educt_molecules.erase(it);
+                    std::cout << "Deleted for molecule " << it->first << std::endl;
+                    for ( auto m_it = mapping_order.begin(); m_it != mapping_order.end(); m_it++ ) {
+                        if ( *m_it == it->first ) {
+                            mapping_order.erase( m_it );
+                            break;
+                        }
+                    }
+                    it = educt_molecules.begin();
+                } else {
+                    ++it;
+                }
+            }
+            for (auto it = product_molecules.begin(); it != product_molecules.end(); /* no increment here */) {
+                // Check a condition and erase if needed
+                if (it->second.size() == 1) {
+                    it = product_molecules.erase(it);
+                    for ( auto m_it = mapping_order.begin(); m_it != mapping_order.end(); m_it++  ) {
+                        if ( *m_it == it->first ) {
+                            mapping_order.erase( m_it );
+                            break;
+                        }
+                    }
+                } else {
+                    ++it;
+                }
+            }
+        }
+
+    bool operator++() {
+        bool permute_next_molecule;
+        int current_molecule = 0;
+        do {
+            permute_next_molecule = false;
+            AtomData molecule = mapping_order[current_molecule];
+            // std::cout << "Current molecule for mapping: " << molecule << std::endl;
+            // if ( molecule.getAtomId() == 1 ) std::exit(1);
+            std::vector<UVertex> &product = product_molecules[molecule];
+            std::vector<UVertex> &educt = educt_molecules[molecule];
+            
+            assert(product.size() == educt.size());
+
+            // std::cout << "Before: ";
+            // for ( auto v : product ) {
+            //     std::cout << v << ' ' << mod::graph::internal::getMolecule(v, lgProduct) << ' ';
+            // }
+            // std::cout << "\nAfter:  "; 
+
+            if ( std::next_permutation(product.begin(), product.end()) == false ) {
+                // Progress to the next molecule
+                // std::cout << "We are false?";
+                permute_next_molecule = true;
+                current_molecule = (current_molecule+1) % mapping_order.size();
+                if (current_molecule == 0) return false;
+            }
+            // for ( auto v : product_molecules[molecule] ) {
+            //     std::cout << v << ' ' << mod::graph::internal::getMolecule(v, lgProduct) << ' ';
+            // }
+            // std::cout << std::endl;
+            
+            // We need to update this specific mapping in the VertexMap.
+            
+            auto it_educt = educt.begin();
+            auto it_product = product.begin();
+            
+            while (it_educt != educt_molecules[molecule].end()) {
+                // Remove the old mappings
+                auto left = vm.left.find(*it_educt);
+                
+                if ( left != vm.left.end() ) {
+                    vm.left.erase(left);
+                }
+                auto right = vm.right.find(*it_product);
+                if ( right != vm.right.end() ) {
+                    vm.right.erase(right);
+                }
+                // Replace it by the new mapping
+                vm.insert({*it_educt, *it_product});
+                it_educt++;
+                it_product++;
+            }
+        } while (permute_next_molecule);
+        return true;
+    }
+
+    VertexMap operator*() const {
+        // std::cout << "Size of VM: " << vm.size() << std::endl;
+        return this->vm;
+    }
+
+private:
+
+    // int current_molecule = 0;
+
+    VertexMap vm;
+    const SomeGraph &gEduct;
+    const SomeGraph &gProduct;
+    const LUG &lgEduct;
+    const LUG &lgProduct;
+    std::vector<AtomData> mapping_order;
+    std::map<AtomData, std::vector<UVertex>> product_molecules;
+    std::map<AtomData, std::vector<UVertex>> educt_molecules;
+};
 
 template <class Vertex>
 struct cycle_detector : public boost::dfs_visitor<> {
@@ -234,13 +404,6 @@ CycleGraph XOR_graphs( VertexMap &vm, boost::bimap<UVertex, CycleVDescriptor> &g
     return cycle_graph;
 }
 
-using ORGraph = boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS, boost::no_property, boost::property<boost::edge_name_t, std::string>>;
-
-//template< class SomeGraph>
-//ORGraph OR_graphs( VertexMap &vm, const SomeGraph &gEduct, const SomeGraph &gProduct, const LUG &lgEduct, const LUG &lgProduct ) {
-//
-//}
-
 std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
 		const std::vector<std::shared_ptr<mod::graph::Graph>> &educts,
 		const std::vector<std::shared_ptr<mod::graph::Graph>> &products,
@@ -268,6 +431,7 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
 	}
 
 	std::vector<VertexMap> vertexMaps;
+    CycleGraph cycle_graph;
 	{ // START WORKING HERE
 		{ // Example THREE --- an actual enumeration algorithm
 			// In essence, we iterate over all permutations of the vertices in the educt graph,
@@ -287,49 +451,103 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
 			// std::next_permutation uses sortedness to determine the last permuation, so start by sorting.
 			std::sort(eductVertices.begin(), eductVertices.end());
 
-			constexpr int limit = 20;
+			constexpr int limit = 10;
 			// We will limit to 'limit' permutations, as otherwise the PDF might get too large.
 			// Note that we also reject all rules where the atom type would change.
 			int permutationCount = 0;
             int num = 0;
+            Generator vertexmap_gen(gEduct, gProduct, lgEduct, lgProduct);
+            bool repeat = false;
 			do {
-                ++num;
-                VertexMap vm;
+                // std::cout << "0" << std::endl;
+                // std::cout << "1" << std::endl;
+                VertexMap vm = *vertexmap_gen;
+                // std::cout << "2" << std::endl;
+                repeat = ++vertexmap_gen;
                 bool valid = true;
-                for (int i = 0; i != eductVertices.size(); i++) {
-                    // check if the molecule data for the atoms matches, otherwise we can't make a rule
-                    if (mod::graph::internal::getMolecule(eductVertices[i], lgEduct) !=
-                        mod::graph::internal::getMolecule(productVertices[i], lgProduct)) {
-                        valid = false;
-                        break;
-                    }
-                    vm.insert(VertexMap::value_type(eductVertices[i], productVertices[i]));
-                }
-                if (!valid) continue;
+                // for(const auto &vt: vm) {
+                //     std::cout << "\"" << mod::graph::internal::getMolecule(vt.left, lgEduct) << "\" "
+                //             << getVertexId(vt.left, gEduct)
+                //             << "\t<=>   "
+                //             << getVertexId(vt.right, gProduct) << " \""
+                //             << mod::graph::internal::getMolecule(vt.right, lgProduct) << "\"\n";
+                // }
+                // std::cout << std::endl;
+                // std::string a;
+                // std::cin >> a;
+                // Make sure to copy the VertexMap before modifying it.
+
+//                 for (int i = 0; i != eductVertices.size(); i++) {
+//                     // check if the molecule data for the atoms matches, otherwise we can't make a rule
+// //                    std::cout << "coutIteration " << i << '\n';
+//                     std::cout << mod::graph::internal::getMolecule(eductVertices[i], lgEduct) << " I " << mod::graph::internal::getMolecule(productVertices[i], lgProduct) << "\n";
+//                     if (mod::graph::internal::getMolecule(eductVertices[i], lgEduct) !=
+//                         mod::graph::internal::getMolecule(productVertices[i], lgProduct)) {
+//                         valid = false;
+//                         break;
+//                     } else {
+//                         std::cout << "Valid mapping\n";
+//                     }
+//                     vm.insert(VertexMap::value_type(eductVertices[i], productVertices[i]));
+//                 }
+                // if (!valid) continue;
 
                 boost::bimap <UVertex, CycleVDescriptor> cycle_graph_map;
-                CycleGraph cycle_graph = XOR_graphs(vm, cycle_graph_map, gEduct, gProduct, lgEduct, lgProduct);
+                cycle_graph.clear();
+                cycle_graph = XOR_graphs(vm, cycle_graph_map, gEduct, gProduct, lgEduct, lgProduct);
                 auto edge_types = boost::get(boost::edge_name, cycle_graph);
+                // std::cout << "Size of XOR graph: " << boost::num_vertices(cycle_graph) << "\n";
 
                 bool has_cycle = false;
                 std::vector <std::vector<CycleVDescriptor>> cycles;
                 cycle_detector vis(has_cycle, cycles);
                 boost::depth_first_search(cycle_graph, visitor(vis));
 
-                if (!has_cycle) continue;
+                if (!has_cycle) {
+                    std::cout << "No Cycle :(" << std::endl;
+                    continue;
+                }
+
+                std::cout << "Found cycle" << std::endl;
 
                 // From this point, we know we have a cycle.
 
-                if (cycles.size() != 1) continue;
+                if (cycles.size() != 1) {
+                    std::cout << "Found " << cycles.size() << " cycles" << std::endl;
+                    // for ( auto &cycle : cycles ) {
+                    //     for (auto it = cycle.begin(); it != cycle.end() && valid; it++) {
+                    //         std::cout << *it;
+                    //         if (it != cycle.begin()) {
+                    //             std::cout << ", ";
+                    //         }
+                    //     }
+                    //     std::cout << "\nPrint cycle? ";
 
+                    //     std::string answer = "";
+                    //     std::cin >> answer;
+                    //     if ( answer == "y" ) {
+                    //         std::string filename = "graph" + std::to_string(permutationCount) + ".dot";
+                    //         std::ofstream dotFile(filename);
+                    //         boost::write_graphviz(dotFile, cycle_graph);
+                    //         dotFile.close();
+                    //         auto r = createRule(vm, lgEduct, lgProduct, true);
+                    //         r->print();
+                    //         std::cin >> answer;
+                    //     }
+                    // }
+                    continue;
+                }
+                
                 std::vector <CycleVDescriptor> cycle = cycles.at(0);
 
                 // Check if it is a valid cycle.
                 if (cycle.size() % 2 == 1)
                     continue; // We know that we can't possibly alternate between an add and a remove.
+                std::cout << "With even length" << std::endl;
                 // If the cycle is not of the desired length, discard it.
                 if (cycle.size() != c)
                     continue;
+                std::cout << "And with the correct cycle length of " << c << std::endl;
 
 
                 // Cycle is only valid if we are alternating between a deleted and an add.
@@ -355,6 +573,8 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
                     prev = v;
                 }
                 if (!valid) continue;
+                
+                std::cout << "The cycle is correctly alternating" << std::endl;
 
                 // We can also use the XOR graph to detect if more than 2 changes per vertex are happening. We can do this because each edge represents a change in the production.
                 // If so, discard that solution.
@@ -472,10 +692,11 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
                 boost::write_graphviz(dotFile, cycle_graph);
                 dotFile.close();
 #endif
+                std::cout << "We found a good mapping!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n";
                 vertexMaps.push_back(std::move(vm));
 				++permutationCount;
 				if(permutationCount == limit) break;
-			} while(std::next_permutation(eductVertices.begin(), eductVertices.end()));
+			} while(repeat);
 		} // end of Example THREE
 	} // END WORKING (roughly) HERE.
 
@@ -541,15 +762,21 @@ BOOST_PYTHON_MODULE(pydoStuff) { // this macro argument is the name of the modul
 int main(int argc, char **argv) {
 	std::vector<std::shared_ptr<mod::graph::Graph> > educts, products;
 	{ // do something else, e.g., take SMILES strings from argv
-		std::shared_ptr<mod::graph::Graph> g1, g2;
-		g1 = mod::graph::Graph::fromSMILES("OCC=O");
-		g2 = mod::graph::Graph::fromSMILES("OC=CO");
-		educts.push_back(g1);
-		products.push_back(g2);
+		// std::shared_ptr<mod::graph::Graph> g1, g2;
+		// g1 = mod::graph::Graph::fromSMILES("OCC=O");
+		// g2 = mod::graph::Graph::fromSMILES("OC=CO");
+		// educts.push_back(g1);
+		// products.push_back(g2);
+        educts.push_back( mod::graph::Graph::fromSMILES("O") );
+        educts.push_back( mod::graph::Graph::fromSMILES("Cl") );
+        educts.push_back( mod::graph::Graph::fromSMILES("CC(=O)OCC") );
+        products.push_back( mod::graph::Graph::fromSMILES("Cl") );
+        products.push_back( mod::graph::Graph::fromSMILES("OCC") );
+        products.push_back( mod::graph::Graph::fromSMILES("CC(=O)O") );
 	}
-    constexpr int c = 2;
-    constexpr int k = 4
-	auto rules = doStuff(educts, products, true, c, k);
+    constexpr int c = 6;
+    constexpr int k = 0;
+	auto rules = doStuff(educts, products, true, k, c);
 	for(auto r: rules) r->print();
 	return 0;
 }

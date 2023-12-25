@@ -1,0 +1,55 @@
+\documentclass{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[a4paper, total={5in, 8in}]{geometry}
+\usepackage{graphicx}
+\usepackage[final]{pdfpages}
+\usepackage{listings}
+\usepackage{amsmath}
+\title{\textbf{Cheminfomatics Assignment 2}}
+\author{William Juhl}
+
+\date{\textit{December 2023}}
+
+\pagenumbering{arabic}
+\begin{document}
+%\pagenumbering{gobble}
+\thispagestyle{empty}
+
+\maketitle
+\newpage
+\thispagestyle{empty}
+
+% \tableofcontents
+
+\newpage
+\section*{1}
+
+\begin{table}[h]
+    \centering
+    \begin{tabular}{ll|cccc}\\
+        Educts & Products & $k$ & $c$ & $n$ & $t$\\\hline
+        C=C, C=C & C1CCC1 & 0 & 4 & & \\
+        C=C, C=C & C1CCC1 & 1 & 4 & & \\
+        O, Cl, CC(=O)OCC & Cl, OCC, CC(=O)O & 0 & 6 \\
+        O, Cl, CC(=O)OCC & Cl, OCC, CC(=O)O & 1 & 6 \\
+        O, Cl, CC(=O)OCC & Cl, OCC, CC(=O)O & 2 & 6 \\
+        C1C(O)CC(O)C(O)C1 & C=CO, C=CO, C=CO  & 0 & 6 & & \\
+        C1C(O)CC(O)C(O)C1 & C=CO, C=CO, C=CO  & 1 & 6 & & \\
+        CC=CC=CC, OC1C=CC=CC=1 & C=CC=CC=C, OC(=C)C=CC=C & 0 & 6 & & \\
+        CC=CC=CC, OC1C=CC=CC=1 & C=CC=CC=C, OC(=C)C=CC=C & 1 & 6 & & \\
+        CC=CC=CC, OC1C=CC=CC=1 & C=CC=CC=C, OC(=C)C=CC=C & 2 & 6 & & \\
+        CC, OC1C=CC=CC=1 & C=C, OC(=C)C=CC=C & 0 & 6 & & \\
+        CC, OC1C=CC=CC=1 & C=C, OC(=C)C=CC=C & 1 & 6 & & \\
+        CC, OC1C=CC=CC=1 & C=C, OC(=C)C=CC=C & 2 & 6 & & \\
+        OP(=O)(O)OP(=O)(O)O, O & O=P(O)(O)O, O=P(O)(O)O  & 0 & 4 & & \\
+        OP(=O)(O)OP(=O)(O)O, O & O=P(O)(O)O, O=P(O)(O)O  & 1 & 4 & & \\
+        OP(=O)(O)OP(=O)(O)O, O & O=P(O)(O)O, O=P(O)(O)O  & 0 & 6 & & \\
+        OP(=O)(O)OP(=O)(O)O, O & O=P(O)(O)O, O=P(O)(O)O  & 1 & 6 & & \\
+        C\#N, C\#N & N=CC\#N & 0 & 4 & & \\
+        C\#N, C\#N & N=CC\#N & 1 & 4 & & \\
+    \end{tabular}
+\end{table}
+
+\end{document} 
+
