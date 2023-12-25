@@ -463,9 +463,15 @@ CycleGraph XOR_graphs( VertexMap &vm, boost::bimap<UVertex, CycleVDescriptor> &g
                         if (left_bond == "-" && right_bond == "=") {
                             auto e = boost::add_edge(from, to, cycle_graph).first;
                             edge_types[e] = "ADD";
-                        } else if (left_bond == "=" && right_bond == "-"){
+                        } else if (left_bond == "=" && right_bond == "-") {
                             auto e = boost::add_edge(from, to, cycle_graph).first;
                             edge_types[e] = "REMOVE";
+                        } else if ( left_bond == "#" && right_bond == "=" ) {
+                            auto e = boost::add_edge(from, to, cycle_graph).first;
+                            edge_types[e] = "REMOVE";
+                        } else if ( left_bond == "=" && right_bond == "#" ) {
+                            auto e = boost::add_edge(from, to, cycle_graph).first;
+                            edge_types[e] = "ADD";
                         }
                     }
                 }
