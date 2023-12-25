@@ -27,12 +27,15 @@ doStuff = _doStuff
 # educts = [smiles("OCC=O")]
 # products = [smiles("OC=CO")]
 
-# educts = [smiles("C=C"), smiles("C=C")]
-# products = [smiles("C1CCC1")]
+educts = [smiles("C=C"), smiles("C=C")]
+products = [smiles("C1CCC1")]
 
-educts = [smiles("O"), smiles("Cl"), smiles("CC(=O)OCC")]
-products = [smiles("Cl"), smiles("OCC"), smiles("CC(=O)O")]
+# educts = [smiles("O"), smiles("Cl"), smiles("CC(=O)OCC")]
+# products = [smiles("Cl"), smiles("OCC"), smiles("CC(=O)O")]
 
-res = doStuff(educts, products, k=1, c=6)
+educts = [smiles("C1C(O)CC(O)C(O)C1")]
+products = [smiles("C=CO"), smiles("C=CO"), smiles("C=CO")]
+
+res = doStuff(educts, products, k=2, c=6)
 for a in res:
 	a.print()

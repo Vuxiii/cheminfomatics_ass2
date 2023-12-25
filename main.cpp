@@ -698,15 +698,82 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
                 }
 
                 if (!valid) continue;
-                std::cout << "The degree for all vertices are less than 3\n";
+                std::cout << "The degree for all vertices are less than 3 and the mapping is VALID!\n";
                 // We know there is only a single cycle.
 
+                
+
                 // Now that we have ensured that the graph is chemically valid, we want to remove the vertex-mappings where the shortest distance to the cycle is greater than k.
+                
+                // We can go k out, for each vertex of the cycle, and add these vertices to the mapping.
+
+                std::vector<std::pair<UVertex, UVertex>> work_set;
+                unsigned int current_distance_from_cycle = 1;
+                for ( auto &vt : vm ) {
+                    work_set.push_back({vt.left, vt.right});
+                }
+                while ( current_distance_from_cycle <= k ) {
+                    std::vector<std::pair<UVertex, UVertex>> subset;
+                    
+                    for ( auto &[left_source, right_source] : work_set ) {
+
+                         for ( const auto &left_edge : asRange(out_edges(left_source, gEduct)) ) {
+                            UVertex left_target = target(left_edge, gEduct);
+                            // If we already have this in the mapping, skip
+                            if ( vm.left.find(left_target) != vm.left.end() ) continue;
+                            AtomData left_mol = mod::graph::internal::getMolecule(left_target, lgEduct);
+
+                            // Find a matching pair on the right side.
+                            for ( const auto &right_edge : asRange( out_edges(right_source, gProduct)) ) {
+                                UVertex right_target = target(right_edge, gProduct);
+                                // If we already have this mapped, skip
+                                if ( vm.right.find( right_target ) != vm.right.end() ) continue;
+                                AtomData right_mol = mod::graph::internal::getMolecule(right_target, lgProduct);
+
+                                // And if the atoms don't match, skip
+                                if ( left_mol != right_mol ) continue;
+                                // Check if the bond is the same
+                                if ( mod::graph::internal::getMolecule(left_edge, lgEduct) != mod::graph::internal::getMolecule(right_edge, lgProduct) ) continue;
+                                std::cout << "Adding context " << left_mol << std::endl;
+                                // std::string a;
+                                // std::cin >> a;
+                                // It is a match. We can potentially have multiple matches here.
+                                // But it might not be that interesting to get the same cycle with a different context.
+                                // A chemist would know.
+
+                                // We need to check if the new mapping will make either the left or the right side have more than two edges changing for each vertex. If it does, we have to discard it.
+
+                                // If a potential vertex is being added, we must ensure that for both sides no unique edges connect it to the cycle.
+                                bool valid = true;
+                                for ( auto &[l, r] : work_set ) {
+                                    if ( edge(l, left_target, gEduct).second != edge(r, right_target, gProduct).second ) {
+                                        valid = false;
+                                        break;
+                                    }
+                                }
+                                
+                                if ( valid ) {
+                                    vm.insert({left_target, right_target});
+                                    subset.push_back({left_target, right_target});
+                                }
+                            }
+
+                        }
+
+                    }
+
+                    work_set = subset;
+                    current_distance_from_cycle++;
+                }
+
+
+                // Or we can:
+                
                 // To do this we do a johnson_all_pairs_shortest_paths which will give us a distance matrix. We can iterate over all the vertices in the cycle, and add the vertices which distances are less than or equal to k.
                 // For this we need the entire graph which means Educt OR Product, so we will need to do an OR on all the edges.
 
                 // Make a copy of the graph and give each edge a weight of 1.
-
+#if 0
                 using DstGraph = boost::adjacency_list <boost::vecS, boost::vecS, boost::undirectedS,
                 /* Vertex prop */ boost::no_property,
                 /* Edge prop   */ boost::property<boost::edge_weight_t, int>>;
@@ -800,6 +867,7 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
                         ++it;
                     }
                 }
+#endif
 #if 0
                 std::string filename = "graph" + std::to_string(permutationCount) + ".dot";
                 std::ofstream dotFile(filename);
