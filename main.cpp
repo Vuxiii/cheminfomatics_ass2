@@ -136,9 +136,9 @@ private:
 };
 
 template<class SomeGraph>
-struct Generator {
+struct Morphism_Generator {
 
-    Generator( const SomeGraph &gEduct, const SomeGraph &gProduct, const LUG &lgEduct, const LUG &lgProduct, unsigned int cycle_length )
+    Morphism_Generator( const SomeGraph &gEduct, const SomeGraph &gProduct, const LUG &lgEduct, const LUG &lgProduct, unsigned int cycle_length )
         : gEduct(gEduct)
         , gProduct(gProduct)
         , lgEduct(lgEduct)
@@ -234,23 +234,24 @@ struct Generator {
 #endif            
             if ( product.next() == false ) {
                 // Progress to the next molecule
-                // std::cout << "We are false?";
                 permute_next_molecule = true;
                 current_molecule = (current_molecule+1) % mapping_order.size();
                 if (current_molecule == 0) {
                     // Select new educt molecules.
                     if ( false == permute_educts() ) {
                         // There are no more new combinations of molecules.
+#if PRINT
                         std::cout << "No more permutations\n";
+#endif
                         return false;
                     }
                 }
             }
 #if PRINT
-            // for ( auto v : product_molecules[molecule].current() ) {
-            //     std::cout << v << ' ' << mod::graph::internal::getMolecule(v, lgProduct) << ' ';
-            // }
-            // std::cout << std::endl;
+            for ( auto v : product_molecules[molecule].current() ) {
+                std::cout << v << ' ' << mod::graph::internal::getMolecule(v, lgProduct) << ' ';
+            }
+            std::cout << std::endl;
 #endif
             make_mapping();
 
@@ -259,7 +260,6 @@ struct Generator {
     }
 
     VertexMap operator*() const {
-        // std::cout << "Size of VM: " << vm.size() << std::endl;
         return this->vm;
     }
 private:
@@ -552,28 +552,10 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
     CycleGraph cycle_graph;
 	{ // START WORKING HERE
 		{ // Example THREE --- an actual enumeration algorithm
-			// In essence, we iterate over all permutations of the vertices in the educt graph,
-			// and for each of them we make a mapping to the vertices of the product graph.
-			// Note, this does no 'alternating addition/removal' check for the edges, so you will very likely
-			// get non-chemical reactions. This will in essence then be your main task:
-			// make sure you will have only chemically valid rules as described on the webpage.
-			// While it can be done by skipping permutations, a fast solution would probably not rely on simple
-			// permutation generation.
-			// For now, we just disable the chemistry check as a hax to get something printed:
-
-			// Copy the educt vertices into a vector so we can permute them.
-			const auto vsEduct = vertices(gEduct);
-			std::vector<UVertex> eductVertices(vsEduct.first, vsEduct.second);
-			const auto productVertices = asRange(vertices(gEduct));
-
-			// std::next_permutation uses sortedness to determine the last permuation, so start by sorting.
-			std::sort(eductVertices.begin(), eductVertices.end());
-
 			constexpr int limit = 10;
 			// We will limit to 'limit' permutations, as otherwise the PDF might get too large.
-			// Note that we also reject all rules where the atom type would change.
 			int permutationCount = 0;
-            Generator vertexmap_gen(gEduct, gProduct, lgEduct, lgProduct, c);
+            Morphism_Generator vertexmap_gen(gEduct, gProduct, lgEduct, lgProduct, c);
             bool repeat = false;
 			do {
                 VertexMap vm = *vertexmap_gen;
@@ -710,10 +692,6 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
 #if PRINT
                                 std::cout << "Adding context " << left_mol << std::endl;
 #endif
-                                // It is a match. We can potentially have multiple matches here.
-                                // But it might not be that interesting to get the same cycle with a different context.
-                                // A chemist would know.
-
                                 // If a potential vertex is being added, we must ensure that for both sides no unique edges connect it to the cycle.
                                 bool valid = true;
                                 for ( auto &[l, r] : work_set ) {
@@ -736,111 +714,6 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
                     work_set = subset;
                     current_distance_from_cycle++;
                 }
-
-
-                // Or we can: (Doesn't work with the new changes)
-                
-                // To do this we do a johnson_all_pairs_shortest_paths which will give us a distance matrix. We can iterate over all the vertices in the cycle, and add the vertices which distances are less than or equal to k.
-                // For this we need the entire graph which means Educt OR Product, so we will need to do an OR on all the edges.
-
-                // Make a copy of the graph and give each edge a weight of 1.
-#if 0
-                using DstGraph = boost::adjacency_list <boost::vecS, boost::vecS, boost::undirectedS,
-                /* Vertex prop */ boost::no_property,
-                /* Edge prop   */ boost::property<boost::edge_weight_t, int>>;
-                using DstVDescriptor = boost::graph_traits<DstGraph>::vertex_descriptor;
-
-                DstGraph dst_graph;
-                auto edge_weight = boost::get(boost::edge_weight, dst_graph);
-                boost::bimap <UVertex, DstVDescriptor> dst_graph_map;
-                for (auto e: asRange(edges(gEduct))) {
-                     const UVertex left_s = source(e, gEduct);
-                     const UVertex left_t = target(e, gEduct);
-
-                     DstVDescriptor right_s;
-                     DstVDescriptor right_t;
-
-                     auto s_it = dst_graph_map.left.find(left_s);
-                     auto t_it = dst_graph_map.left.find(left_t);
-                     if (s_it != dst_graph_map.left.end()) {
-                        right_s = s_it->second;
-                     } else {
-                        right_s = add_vertex(dst_graph);
-                        dst_graph_map.insert({left_s, right_s});
-                     }
-                     if (t_it != dst_graph_map.left.end()) {
-                        right_t = t_it->second;
-                     } else {
-                        right_t = add_vertex(dst_graph);
-                        dst_graph_map.insert({left_t, right_t});
-                     }
-                     if (boost::edge(right_s, right_t, dst_graph).second == false) {
-                        auto e = boost::add_edge(right_s, right_t, dst_graph).first;
-                        edge_weight[e] = 1;
-                     }
-                }
-                for (auto e: asRange(edges(gProduct))) {
-                    // We don't care about the Product side, so we map them to the educt side.
-                    if ( vm.right.find( source(e, gProduct) ) == vm.right.end() ) continue;
-                    if ( vm.right.find( target(e, gProduct) ) == vm.right.end() ) continue;
-                    const UVertex left_s = vm.right.at(source(e, gProduct));
-                    const UVertex left_t = vm.right.at(target(e, gProduct));
-
-                    DstVDescriptor right_s;
-                    DstVDescriptor right_t;
-
-                    auto s_it = dst_graph_map.left.find(left_s);
-                    auto t_it = dst_graph_map.left.find(left_t);
-                    if (s_it != dst_graph_map.left.end()) {
-                       right_s = s_it->second;
-                    } else {
-                        right_s = add_vertex(dst_graph);
-                        dst_graph_map.insert({left_s, right_s});
-                    }
-                    if (t_it != dst_graph_map.left.end()) {
-                       right_t = t_it->second;
-                    } else {
-                       right_t = add_vertex(dst_graph);
-                       dst_graph_map.insert({left_t, right_t});
-                    }
-                    if (boost::edge(right_s, right_t, dst_graph).second == false) {
-                       auto e = boost::add_edge(right_s, right_t, dst_graph).first;
-                       edge_weight[e] = 1;
-                    }
-                }
-#if PRINT
-                std::cout << "We have successfully made the OR graph\n";
-#endif
-                unsigned int num_v = boost::num_vertices(dst_graph);
-                std::vector <std::vector<int>> distance_matrix(num_v, std::vector<int>(num_v));
-
-                boost::johnson_all_pairs_shortest_paths(dst_graph, distance_matrix);
-
-                // Now that we have a distance matrix, iterate over all the vertices in the cycle, and only add the vertices that are <= k.
-
-                std::set <UVertex> retain_vertices;
-                for (const CycleVDescriptor cycle_v : cycle) {
-                    // Map the vertex from the cycle graph -> Educt graph -> Dst Graph
-                    DstVDescriptor from_vertex = dst_graph_map.left.at(cycle_graph_map.right.at(cycle_v));
-                    for (UVertex v: asRange(vertices(gEduct))) {
-                        // Map the vertex from the Educt graph -> Dst Graph
-                        DstVDescriptor to_vertex = dst_graph_map.left.at(v);
-                        if (distance_matrix[from_vertex][to_vertex] <= k) {
-                            // Add the vertex v
-                            retain_vertices.insert(v);
-                        }
-                    }
-                }
-                // Only retain the mappings which are in the set
-                auto it = vm.begin();
-                while (it != vm.end()) {
-                    if (retain_vertices.find(it->left) == retain_vertices.end()) {
-                        it = vm.erase(it);
-                    } else {
-                        ++it;
-                    }
-                }
-#endif
 #if 0
                 std::string filename = "graph" + std::to_string(permutationCount) + ".dot";
                 std::ofstream dotFile(filename);
@@ -888,6 +761,8 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
 			rules.push_back(r);
 		}
 	}
+    std::cout << "t: " << vertexMaps.size() << "\n";
+    std::cout << "n: " << rules.size() << "\n";
 	return rules;
 }
 
