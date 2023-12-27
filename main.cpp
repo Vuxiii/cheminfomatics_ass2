@@ -339,7 +339,7 @@ struct cycle_detector : public boost::dfs_visitor<> {
         if (parent.find(target) != parent.end() && parent[target] == source) {
             return;
         }
-#if PRINT
+#if 0
        std::cout << "--[[ Cycle detected ]]--\n";
 #endif
         _has_cycle = true;
@@ -347,12 +347,12 @@ struct cycle_detector : public boost::dfs_visitor<> {
         std::vector<Vertex> _cycle;
         _cycle.push_back(source);
 
-#if PRINT
+#if 0
        std::cout << "Adding vertex to cycle " << source << "\n";
 #endif
         for (auto current = target; current != source; current = parent[current]) {
             _cycle.push_back(current);
-#if PRINT
+#if 0
            std::cout << "Adding vertex to cycle " << current << "\n";
 #endif
         }
@@ -368,7 +368,6 @@ struct cycle_detector : public boost::dfs_visitor<> {
         }
         parent[source] = target;
     }
-
 
 protected:
     bool &_has_cycle;
@@ -472,6 +471,9 @@ CycleGraph XOR_graphs( VertexMap &vm, boost::bimap<UVertex, CycleVDescriptor> &g
                         } else if ( left_bond == "=" && right_bond == "#" ) {
                             auto e = boost::add_edge(from, to, cycle_graph).first;
                             edge_types[e] = "ADD";
+                        } else {
+                            auto e = boost::add_edge(from, to, cycle_graph).first;
+                            edge_types[e] = "INVALID";
                         }
                     }
                 }
@@ -487,6 +489,9 @@ CycleGraph XOR_graphs( VertexMap &vm, boost::bimap<UVertex, CycleVDescriptor> &g
                     if ( left_bond == "-" ) {
                         auto e = boost::add_edge(from, to, cycle_graph).first;
                         edge_types[e] = "REMOVE";
+                    } else {
+                        auto e = boost::add_edge(from, to, cycle_graph).first;
+                        edge_types[e] = "INVALID";
                     }
                     
                 }
@@ -513,6 +518,9 @@ CycleGraph XOR_graphs( VertexMap &vm, boost::bimap<UVertex, CycleVDescriptor> &g
                     if ( right_bond == "-" ) {
                         auto e = boost::add_edge(from, to, cycle_graph).first;
                         edge_types[e] = "ADD";
+                    } else {
+                        auto e = boost::add_edge(from, to, cycle_graph).first;
+                        edge_types[e] = "INVALID";
                     }
                 }
 
@@ -577,7 +585,13 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
                 cycle_graph.clear();
                 cycle_graph = XOR_graphs(vm, cycle_graph_map, gEduct, gProduct, lgEduct, lgProduct);
                 auto edge_types = boost::get(boost::edge_name, cycle_graph);
-            
+                for ( auto e_it = boost::edges(cycle_graph).first; e_it != boost::edges(cycle_graph).second; e_it++ ) {
+                    if (edge_types[*e_it] == "INVALID") {
+                        valid = false;
+                        break;
+                    }
+                }
+                if (!valid) continue;
 #if PRINT
                 std::cout << "Size of XOR graph: " << boost::num_vertices(cycle_graph) << "\n";
 #endif
@@ -617,6 +631,7 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
 
                 // Cycle is only valid if we are alternating between a deleted and an add.
                 std::string prev_operation = "";
+                std::string this_operation = "";
                 bool first = true;
                 CycleVDescriptor prev;
                 for (auto it = cycle.begin(); it != cycle.end() && valid; it++) {
@@ -624,7 +639,7 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
                     if (!first) {
                         auto e = boost::edge(prev, v, cycle_graph).first;
                         // Check if we are alternating between ADD and REMOVE
-                        std::string this_operation = edge_types[e];
+                        this_operation = edge_types[e];
                         if (prev_operation == "") {
                             prev_operation = this_operation;
                         } else {
@@ -637,6 +652,12 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
                     first = false;
                     prev = v;
                 }
+                auto e = boost::edge(*cycle.rbegin(), *cycle.begin(), cycle_graph).first;
+                this_operation = edge_types[e];
+                if ( prev_operation == this_operation ) {
+                    valid = false;
+                }
+                
                 if (!valid) continue;
 #if PRINT                
                 std::cout << "The cycle is correctly alternating" << std::endl;
@@ -696,6 +717,18 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
                                 bool valid = true;
                                 for ( auto &[l, r] : work_set ) {
                                     if ( edge(l, left_target, gEduct).second != edge(r, right_target, gProduct).second ) {
+                                        valid = false;
+                                        break;
+                                    }
+                                }
+                                for ( auto &[l, r] : subset ) {
+                                    if ( edge(l, left_target, gEduct).second != edge(r, right_target, gProduct).second ) {
+                                        valid = false;
+                                        break;
+                                    }
+                                }
+                                for ( auto &vt : vm ) {
+                                    if ( edge(vt.left, left_target, gEduct).second != edge(vt.right, right_target, gProduct).second ) {
                                         valid = false;
                                         break;
                                     }
@@ -761,8 +794,8 @@ std::vector<std::shared_ptr<mod::rule::Rule> > doStuff(
 			rules.push_back(r);
 		}
 	}
-    std::cout << "t: " << vertexMaps.size() << "\n";
     std::cout << "n: " << rules.size() << "\n";
+    std::cout << "t: " << vertexMaps.size() << "\n";
 	return rules;
 }
 

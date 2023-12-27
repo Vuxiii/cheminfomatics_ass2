@@ -66,12 +66,12 @@ When we have a morphism we can construct a new graph by XORing the bonds on the 
     \item If the left atom has a bond to another atom in the morphism and the right atom does \textbf{not} have a bond to another atom in the morphism we have the following two cases:
     \begin{enumerate}
         \item If it is a single bond we add an edge with label REMOVE between the left atom's source and target.
-        \item If the bond is a double or a triple bond skip the edge.
+        \item If the bond is a double or a triple bond it is an invalid edge.
     \end{enumerate}
     \item If the left atom does \textbf{not} have a bond to another atom in the morphism and the right atom does have a bond to another atom in the morphism we have the following two cases:
     \begin{enumerate}
         \item If it is a single bond we add an edge with label ADD between the right atom's source and target.
-        \item If the bond is a double or a triple bond skip the edge.
+        \item If the bond is a double or a triple bond it is an invalid edge.
     \end{enumerate}
     \item If both the left and the right have a bond to another atom in the morphism we have the following five cases:
     \begin{enumerate}
@@ -79,10 +79,10 @@ When we have a morphism we can construct a new graph by XORing the bonds on the 
         \item If the bond on the left is a double bond and the bond on the right is a single bond add the edge with label REMOVE.
         \item if the bond on the left is a double bond and the bond on the right is a triple bond add the edge with label ADD.
         \item if the bond on the left is a triple bond and t he bond on the right is a double bond add the edge with label REMOVE.
-        \item Otherwise we ignore the edge.
+        \item Otherwise it is an invalid edge
     \end{enumerate}
 \end{enumerate}
-The resulting graph is the XORed graph of the educt and the product using the given morphism.
+The resulting graph is the XORed graph of the educt and the product using the given morphism. If any of the edges are invalid, the morphism is also not chemically valid.
 
 \subsection{Cycle Detection and Construction}
 
@@ -103,31 +103,35 @@ This ensures that we only expand the morphism to include atoms which can reach t
 
 \newpage
 \section{Results}
-We will now compute a series of tests to see how the program performs. I am running the program inside a Docker container with the Rosetta translation layer on my Macbook Pro running a M1 Pro processor with access to 8 GB of RAM out of a total of 16 GB of RAM. In the below table \textit{k} is the context, \textit{c} is the cycle length, \textit{n} is the number of unique rules found and \textit{t} is  the number of valid morphisms generated.
+We will now compute a series of tests to see how the program performs. I am running the program inside a Docker container with the Rosetta translation layer on my Macbook Pro running a 10 core M1 Pro processor with access to 8 GB of RAM out of a total of 16 GB of RAM. In the below table  
 \begin{table}[h]
     \centering
     \begin{tabular}{ll|ccccc}\\
         Educts & Products & $k$ & $c$ & $n$ & $t$ & $s$\\\hline
-        C=C, C=C & C1CCC1 & 0 & 4 & & & \\
-        C=C, C=C & C1CCC1 & 1 & 4 & & & \\
-        O, Cl, CC(=O)OCC & Cl, OCC, CC(=O)O & 0 & 6 & \\
-        O, Cl, CC(=O)OCC & Cl, OCC, CC(=O)O & 1 & 6 & \\
-        O, Cl, CC(=O)OCC & Cl, OCC, CC(=O)O & 2 & 6 & \\
-        C1C(O)CC(O)C(O)C1 & C=CO, C=CO, C=CO  & 0 & 6 & & & \\
-        C1C(O)CC(O)C(O)C1 & C=CO, C=CO, C=CO  & 1 & 6 & & & \\
-        CC=CC=CC, OC1C=CC=CC=1 & C=CC=CC=C, OC(=C)C=CC=C & 0 & 6 & & & \\
-        CC=CC=CC, OC1C=CC=CC=1 & C=CC=CC=C, OC(=C)C=CC=C & 1 & 6 & & & \\
-        CC=CC=CC, OC1C=CC=CC=1 & C=CC=CC=C, OC(=C)C=CC=C & 2 & 6 & & & \\
-        CC, OC1C=CC=CC=1 & C=C, OC(=C)C=CC=C & 0 & 6 & & & \\
-        CC, OC1C=CC=CC=1 & C=C, OC(=C)C=CC=C & 1 & 6 & & & \\
-        CC, OC1C=CC=CC=1 & C=C, OC(=C)C=CC=C & 2 & 6 & & & \\
-        OP(=O)(O)OP(=O)(O)O, O & O=P(O)(O)O, O=P(O)(O)O  & 0 & 4 & & & \\
-        OP(=O)(O)OP(=O)(O)O, O & O=P(O)(O)O, O=P(O)(O)O  & 1 & 4 & & & \\
-        OP(=O)(O)OP(=O)(O)O, O & O=P(O)(O)O, O=P(O)(O)O  & 0 & 6 & & & \\
-        OP(=O)(O)OP(=O)(O)O, O & O=P(O)(O)O, O=P(O)(O)O  & 1 & 6 & & & \\
-        C\#N, C\#N & N=CC\#N & 0 & 4 & & & \\
-        C\#N, C\#N & N=CC\#N & 1 & 4 & & & \\
+        C=C, C=C & C1CCC1 & 0 & 4 & 2 & 10 & 0.260s\\
+        C=C, C=C & C1CCC1 & 1 & 4 & 2 & 10 & 0.267s\\
+        O, Cl, CC(=O)OCC & Cl, OCC, CC(=O)O & 0 & 6 & 3 & 10 & 0.821s\\
+        O, Cl, CC(=O)OCC & Cl, OCC, CC(=O)O & 1 & 6 & 3 & 10 & 0.850s\\
+        O, Cl, CC(=O)OCC & Cl, OCC, CC(=O)O & 2 & 6 & 3 & 10 & 0.858s\\
+        C1C(O)CC(O)C(O)C1 & C=CO, C=CO, C=CO  & 0 & 6 & 4 & 10 & 0.443s\\
+        C1C(O)CC(O)C(O)C1 & C=CO, C=CO, C=CO  & 1 & 6 & 6 & 10 & 0.475s\\
+        CC=CC=CC, OC1C=CC=CC=1 & C=CC=CC=C, OC(=C)C=CC=C & 0 & 6 & 4 & 10 & 4.225s\\
+        CC=CC=CC, OC1C=CC=CC=1 & C=CC=CC=C, OC(=C)C=CC=C & 1 & 6 & 6 & 10 & 4.272s\\
+        CC=CC=CC, OC1C=CC=CC=1 & C=CC=CC=C, OC(=C)C=CC=C & 2 & 6 & 7 & 10 & 4.285s\\
+        CC, OC1C=CC=CC=1 & C=C, OC(=C)C=CC=C & 0 & 6 & 4 & 10 & 3.348s\\
+        CC, OC1C=CC=CC=1 & C=C, OC(=C)C=CC=C & 1 & 6 & 4 & 10 & 3.339s\\
+        CC, OC1C=CC=CC=1 & C=C, OC(=C)C=CC=C & 2 & 6 & 4 & 10 & 3.432s\\
+        OP(=O)(O)OP(=O)(O)O, O & O=P(O)(O)O, O=P(O)(O)O  & 0 & 4 & 1 & 10 & 0.313s\\
+        OP(=O)(O)OP(=O)(O)O, O & O=P(O)(O)O, O=P(O)(O)O  & 1 & 4 & 1 & 10 & 0.307s\\
+        OP(=O)(O)OP(=O)(O)O, O & O=P(O)(O)O, O=P(O)(O)O  & 0 & 6 & 1 & 10 & 0.407s\\
+        OP(=O)(O)OP(=O)(O)O, O & O=P(O)(O)O, O=P(O)(O)O  & 1 & 6 & 1 & 10 & 0.416s\\
+        C\#N, C\#N & N=CC\#N & 0 & 4 & 1 & 2 & 0.271s\\
+        C\#N, C\#N & N=CC\#N & 1 & 4 & 1 & 2 & 0.278s\\
     \end{tabular}
+    \caption{
+        \textit{k} is the context, \textit{c} is the cycle length, \textit{n} is the number of unique rules found and \textit{t} is  the number of valid morphisms generated. The last column is the \textit{real} time it took to generate the rules. The time is measured in seconds.
+    }
+    
 \end{table}
 \newpage
 \section{Example}
