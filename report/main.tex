@@ -105,7 +105,7 @@ This ensures that we only expand the morphism to include atoms which can reach t
 
 \newpage
 \section{Results}
-We will now compute a series of tests to see how the program performs. I am running the program inside a Docker container with the Rosetta translation layer on my Macbook Pro running a 10 core M1 Pro processor with access to 8 GB of RAM out of a total of 16 GB of RAM. In the below table  
+We will now compute a series of tests to see how the program performs. I am running the program inside a Docker container with the Rosetta translation layer on my Macbook Pro running a 10 core M1 Pro processor with access to 8 GB of RAM out of a total of 16 GB of RAM.
 \begin{table}[h]
     \centering
     \begin{tabular}{ll|ccccc}\\
@@ -154,9 +154,13 @@ As we can observe (a) contains a bigger hypergraph than that in (b).
 
 \newpage
 \section{Improvements}
-The main improvement that can be done is to speed up finding valid morphisms resulting in unique rules. Currently we are generating all possible morphisms without checking for symmetry. My hypothesis is that many of the morphisms we generate result in the exact same rules. This can be seen by the number of discarded rules from the table above. By pruning the morphisms from the same cycle which result in an identical rule we can get a more diverse set of rules.
+The main improvement that can be done is to speed up finding valid morphisms resulting in unique rules. Currently we are generating all possible morphisms without checking for symmetry. My hypothesis is that many of the morphisms we generate result in the exact same rules. This can be seen by the number of discarded rules from the table above. By pruning the morphisms from the same cycle which result in an identical rule we can possibly get a more diverse set of rules.
 
+If a cycle has been detected with even length and only a few edges being of the wrong type, we could potentially find another vertex which would satisfy the cycle. This would decrease the amount of morphisms we have to generate before finding a valid cycle.
 
+Another way to generate morphisms would be to pick a starting atom on the educt and product side. Then as long as the desired cycle length has not yet been reached, add an edge to another vertex from the current mapping alternating between adding the edge from the educt and product. This should be used in conjunction with a backtracking algorithm to fix the issue of the chain of atoms not resulting in a cycle. By doing this we ensure at the same time that the cycle exists, is of even length and is alternating between addition and deletion. At the same time we can also possibly construct a more diverse set of rules by choosing different starting atoms for future morphisms.
+
+As a final note our implementation has some steps which could be squashed into a single step. For example when we detect a cycle, we could at the same time do a validity check. This would save us from having to construct the cycle and then check if it is valid. And if the above suggestion of searching for a cycle while constructing the morphism, we could also remove XORing of edges step as it would be implemented in the morphism generation.
 
 \end{document} 
 
