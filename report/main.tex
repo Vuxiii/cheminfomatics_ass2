@@ -6,6 +6,8 @@
 \usepackage[final]{pdfpages}
 \usepackage{listings}
 \usepackage{amsmath}
+\usepackage{subfigure}
+
 \title{\textbf{Cheminfomatics Assignment 2}}
 \author{William Juhl}
 
@@ -108,25 +110,25 @@ We will now compute a series of tests to see how the program performs. I am runn
     \centering
     \begin{tabular}{ll|ccccc}\\
         Educts & Products & $k$ & $c$ & $n$ & $t$ & $s$\\\hline
-        C=C, C=C & C1CCC1 & 0 & 4 & 2 & 10 & 0.260s\\
-        C=C, C=C & C1CCC1 & 1 & 4 & 2 & 10 & 0.267s\\
-        O, Cl, CC(=O)OCC & Cl, OCC, CC(=O)O & 0 & 6 & 3 & 10 & 0.821s\\
-        O, Cl, CC(=O)OCC & Cl, OCC, CC(=O)O & 1 & 6 & 3 & 10 & 0.850s\\
-        O, Cl, CC(=O)OCC & Cl, OCC, CC(=O)O & 2 & 6 & 3 & 10 & 0.858s\\
-        C1C(O)CC(O)C(O)C1 & C=CO, C=CO, C=CO  & 0 & 6 & 4 & 10 & 0.443s\\
-        C1C(O)CC(O)C(O)C1 & C=CO, C=CO, C=CO  & 1 & 6 & 6 & 10 & 0.475s\\
-        CC=CC=CC, OC1C=CC=CC=1 & C=CC=CC=C, OC(=C)C=CC=C & 0 & 6 & 4 & 10 & 4.225s\\
-        CC=CC=CC, OC1C=CC=CC=1 & C=CC=CC=C, OC(=C)C=CC=C & 1 & 6 & 6 & 10 & 4.272s\\
-        CC=CC=CC, OC1C=CC=CC=1 & C=CC=CC=C, OC(=C)C=CC=C & 2 & 6 & 7 & 10 & 4.285s\\
-        CC, OC1C=CC=CC=1 & C=C, OC(=C)C=CC=C & 0 & 6 & 4 & 10 & 3.348s\\
-        CC, OC1C=CC=CC=1 & C=C, OC(=C)C=CC=C & 1 & 6 & 4 & 10 & 3.339s\\
-        CC, OC1C=CC=CC=1 & C=C, OC(=C)C=CC=C & 2 & 6 & 4 & 10 & 3.432s\\
-        OP(=O)(O)OP(=O)(O)O, O & O=P(O)(O)O, O=P(O)(O)O  & 0 & 4 & 1 & 10 & 0.313s\\
-        OP(=O)(O)OP(=O)(O)O, O & O=P(O)(O)O, O=P(O)(O)O  & 1 & 4 & 1 & 10 & 0.307s\\
-        OP(=O)(O)OP(=O)(O)O, O & O=P(O)(O)O, O=P(O)(O)O  & 0 & 6 & 1 & 10 & 0.407s\\
-        OP(=O)(O)OP(=O)(O)O, O & O=P(O)(O)O, O=P(O)(O)O  & 1 & 6 & 1 & 10 & 0.416s\\
-        C\#N, C\#N & N=CC\#N & 0 & 4 & 1 & 2 & 0.271s\\
-        C\#N, C\#N & N=CC\#N & 1 & 4 & 1 & 2 & 0.278s\\
+        C=C, C=C & C1CCC1 & 0 & 4 & 2 & 10 & 0.250s \\
+        C=C, C=C & C1CCC1 & 1 & 4 & 2 & 10 & 0.255s \\
+        O, Cl, CC(=O)OCC & Cl, OCC, CC(=O)O & 0 & 6 & 3 & 10 & 0.804s \\
+        O, Cl, CC(=O)OCC & Cl, OCC, CC(=O)O & 1 & 6 & 3 & 10 & 0.804s \\
+        O, Cl, CC(=O)OCC & Cl, OCC, CC(=O)O & 2 & 6 & 3 & 10 & 0.811s \\
+        C1C(O)CC(O)C(O)C1 & C=CO, C=CO, C=CO  & 0 & 6 & 4 & 10 & 0.437s \\
+        C1C(O)CC(O)C(O)C1 & C=CO, C=CO, C=CO  & 1 & 6 & 6 & 10 & 0.455s \\
+        CC=CC=CC, OC1C=CC=CC=1 & C=CC=CC=C, OC(=C)C=CC=C & 0 & 6 & 4 & 10 & 4.169s \\
+        CC=CC=CC, OC1C=CC=CC=1 & C=CC=CC=C, OC(=C)C=CC=C & 1 & 6 & 6 & 10 & 4.163s \\
+        CC=CC=CC, OC1C=CC=CC=1 & C=CC=CC=C, OC(=C)C=CC=C & 2 & 6 & 7 & 10 & 4.146s \\
+        CC, OC1C=CC=CC=1 & C=C, OC(=C)C=CC=C & 0 & 6 & 4 & 10 & 3.266s \\
+        CC, OC1C=CC=CC=1 & C=C, OC(=C)C=CC=C & 1 & 6 & 4 & 10 & 3.264s \\
+        CC, OC1C=CC=CC=1 & C=C, OC(=C)C=CC=C & 2 & 6 & 4 & 10 & 3.290s \\
+        OP(=O)(O)OP(=O)(O)O, O & O=P(O)(O)O, O=P(O)(O)O  & 0 & 4 & 1 & 10 & 0.322s \\
+        OP(=O)(O)OP(=O)(O)O, O & O=P(O)(O)O, O=P(O)(O)O  & 1 & 4 & 1 & 10 & 0.317s \\
+        OP(=O)(O)OP(=O)(O)O, O & O=P(O)(O)O, O=P(O)(O)O  & 0 & 6 & 1 & 10 & 0.399s \\
+        OP(=O)(O)OP(=O)(O)O, O & O=P(O)(O)O, O=P(O)(O)O  & 1 & 6 & 1 & 10 & 0.397s \\
+        C\#N, C\#N & N=CC\#N & 0 & 4 & 1 & 2 & 0.254s \\
+        C\#N, C\#N & N=CC\#N & 1 & 4 & 1 & 2 & 0.270s \\
     \end{tabular}
     \caption{
         \textit{k} is the context, \textit{c} is the cycle length, \textit{n} is the number of unique rules found and \textit{t} is  the number of valid morphisms generated. The last column is the \textit{real} time it took to generate the rules. The time is measured in seconds.
@@ -136,8 +138,25 @@ We will now compute a series of tests to see how the program performs. I am runn
 \newpage
 \section{Example}
 
+To illustrate how a difference in context will affect the derivations, we have constructed the following example.
+
+From the above table, derive the rules with cycle length of 6 from the third row. We have however removed the Chlorid from the educt and the product side. Then by adding to the subset only the educts and applying the generated rules once will result in the below figure. We will use context arguments of $0$ and $1$ and depict them below.
+
+As we can observe (a) contains a bigger hypergraph than that in (b).
+
+\begin{figure}[h!]
+    \centering
+    \caption{Hypergraphs from running a derivation once with the generated rules.}
+    \subfigure[Context k = 0]{\includegraphics[trim = 1.5cm 12.6cm 1.5cm 2.3cm, clip,page=3, width=0.8\textwidth]{example_k0.pdf}}
+    \newline
+    \subfigure[Context k = 1]{\includegraphics[trim = 1.5cm 12cm 1.5cm 2.4cm, clip,page=3, width=0.8\textwidth]{example_k1.pdf}}
+\end{figure}
+
 \newpage
 \section{Improvements}
+The main improvement that can be done is to speed up finding valid morphisms resulting in unique rules. Currently we are generating all possible morphisms without checking for symmetry. My hypothesis is that many of the morphisms we generate result in the exact same rules. This can be seen by the number of discarded rules from the table above. By pruning the morphisms from the same cycle which result in an identical rule we can get a more diverse set of rules.
+
+
 
 \end{document} 
 

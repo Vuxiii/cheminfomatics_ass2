@@ -24,20 +24,7 @@ def _doStuff(educts, products, doChemistryCheck=True, k=1, c=6):
 
 pydoStuff.doStuff = _doStuff
 doStuff = _doStuff
-# end of friendlyfier code
 
-# educts = [smiles("OCC=O")]
-# products = [smiles("OC=CO")]
-
-# educts = [smiles("O"), smiles("Cl"), smiles("CC(=O)OCC")]
-# products = [smiles("Cl"), smiles("OCC"), smiles("CC(=O)O")]
-
-# educts = [smiles("C1C(O)CC(O)C(O)C1")]
-# products = [smiles("C=CO"), smiles("C=CO"), smiles("C=CO")]
-
-# res = doStuff(educts, products, k=2, c=6)
-# for a in res:
-# 	a.print()
 
 class Option:
     def __init__(self, educts:list, products:list, k:int, c:int):
@@ -50,11 +37,9 @@ class Option:
           res = doStuff(self.educts, self.products, k=self.k, c=self.c)
           for a in res:
                 a.print()
-	
-# Wrap below code inside an option which the user can run when being prompted for which test to run
 
 options = [ 
-	Option(["C=C", "C=C"], ["C1CCC1"], 0, 4),
+    Option(["C=C", "C=C"], ["C1CCC1"], 0, 4),
     Option(["C=C", "C=C"], ["C1CCC1"], 1, 4),
     Option(["O", "Cl", "CC(=O)OCC"], ["Cl", "OCC", "CC(=O)O"], 0, 6),
     Option(["O", "Cl", "CC(=O)OCC"], ["Cl", "OCC", "CC(=O)O"], 1, 6),
@@ -73,58 +58,18 @@ options = [
     Option(["OP(=O)(O)OP(=O)(O)O", "O"], ["O=P(O)(O)O", "O=P(O)(O)O"], 1, 6),
     Option(["C#N", "C#N"], ["N=CC#N"], 0, 4),
     Option(["C#N", "C#N"], ["N=CC#N"], 1, 4)
- ]
+]
 
-options[18].func()
-# Prompt the user for which of the above options to run. Repeat this untill all the options have been run. from std out grep for "t: " and store the number in t and grep for "n: " and store the number in n.
+def example(k):
+    educt = [ smiles(g) for g in ["O","CC(=O)OCC"] ]
+    product = [ smiles(g) for g in ["OCC", "CC(=O)O"] ]
+    inputRules = doStuff(educt, product, k=k, c=6)
+    
 
-
-
-# doneOptions = []
-
-# while len(options) > 0:
-#     print("Choose one of the following options:")
-#     for i in range(len(options)):
-#         print(i, ":", options[i].educts, "->", options[i].products, "k =", options[i].k, "c =", options[i].c)
-        
-#     print("-"*80)
-
-# # Print the already done options
-#     for i in range(len(doneOptions)):
-#         print(i, ":", doneOptions[i].educts, "->", doneOptions[i].products, "k =", doneOptions[i].k, "c =", doneOptions[i].c, "t =", doneOptions[i].t, "n =", doneOptions[i].n, "s =", doneOptions[i].s)
-
-#     print("Or type 'done' to exit.")
-#     choice = input()
-#     if choice == "done":
-#         break
-#     try:
-#         choice = int(choice)
-#     except:
-#         print("Invalid choice")
-#         continue
-#     if choice >= len(options):
-#         print("Invalid choice")
-#         continue
-#     option = options[choice]
-#     print("Running option", choice, ":", option.educts, "->", option.products, "k =", option.k, "c =", option.c)
-        
-#     original_out = sys.stdout
-#     sys.stdout = StringIO()
-        
-#     option.func()
-
-#     lines = sys.stdout.getvalue().splitlines()
-
-#     sys.stdout = original_out
-
-#     for line in lines:
-#         if line.startswith("t: "):
-#             option.t = int(line[3:])
-#         elif line.startswith("n: "):
-#             option.n = int(line[3:])
-#         elif line.startswith("sys"):
-#             option.s = str(line[4:])
-
-
-#     doneOptions.append(option)
-#     options.remove(option)
+    dg = DG(graphDatabase=educt)
+    dg.build().execute(
+        addSubset(educt)
+        >> repeat[1](inputRules)
+    )
+    dg.print()
+    # for a in dg.products: a.print()
